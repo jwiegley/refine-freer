@@ -608,7 +608,7 @@ Program Fixpoint raise {e} `(f : Eff effs a) : Eff (e :: effs) a :=
 Local Obligation Tactic :=
   program_simpl; try (eapply Union_empty; eauto).
 
-Program Fixpoint refine {s s' a} (AbsR : s -> s' -> Prop)
+Program Fixpoint refine_fiat {s s' a} (AbsR : s -> s' -> Prop)
         (n : nat)
         (old : Eff [Choice; State s] a)
         (new : Eff [Choice; State s'] a) : Prop :=
@@ -620,22 +620,22 @@ Program Fixpoint refine {s s' a} (AbsR : s -> s' -> Prop)
 
     | Pure x, Impure u k =>
       match decomp u with
-      | inl (Pick P) => exists v, P v /\ refine AbsR n' old (k v)
+      | inl (Pick P) => exists v, P v /\ refine_fiat AbsR n' old (k v)
       | inr u' =>
         match decomp u' with
         | inl f => exists s,
-           refine AbsR n' old (k (_ (snd (State_func f s))))
+           refine_fiat AbsR n' old (k (_ (snd (State_func f s))))
         | inr u' => !
         end
       end
 
     | Impure u k, Pure y =>
       match decomp u with
-      | inl (Pick P) => exists v, P v /\ refine AbsR n' (k v) new
+      | inl (Pick P) => exists v, P v /\ refine_fiat AbsR n' (k v) new
       | inr u' =>
         match decomp u' with
         | inl f => exists s,
-           refine AbsR n' (k (_ (snd (State_func f s)))) new
+           refine_fiat AbsR n' (k (_ (snd (State_func f s)))) new
         | inr u' => !
         end
       end
@@ -647,21 +647,21 @@ Program Fixpoint refine {s s' a} (AbsR : s -> s' -> Prop)
       | inl (Pick P), inr yu' =>
         match decomp yu' with
         | inl g => exists v s,
-            P v /\ refine AbsR n' (xk v) (yk (_ (snd (State_func g s))))
+            P v /\ refine_fiat AbsR n' (xk v) (yk (_ (snd (State_func g s))))
         | inr u' => !
         end
 
       | inr xu', inl (Pick P) =>
         match decomp xu' with
         | inl f => exists v s,
-            P v /\ refine AbsR n' (xk (_ (snd (State_func f s)))) (yk v)
+            P v /\ refine_fiat AbsR n' (xk (_ (snd (State_func f s)))) (yk v)
         | inr u' => !
         end
 
       | inr xu', inr yu' =>
         match decomp xu', decomp yu' with
         | inl f, inl g => exists s s', AbsR s s' ->
-           refine AbsR n' (xk (_ (snd (State_func f s))))
+           refine_fiat AbsR n' (xk (_ (snd (State_func f s))))
                           (yk (_ (snd (State_func g s'))))
         | inl _,   inr yu' => !
         | inr xu', inl _   => !
@@ -670,54 +670,6 @@ Program Fixpoint refine {s s' a} (AbsR : s -> s' -> Prop)
       end
     end
   end.
-
-Class Refines (eff : Type -> Type) := {
-  refinement : forall a, eff a -> a -> Prop;
-  candidate  : forall a (e : eff a), { x | refinement _ e x }
-}.
-
-Arguments refinement {eff _ a} _ _.
-Arguments candidate {eff _ a} _.
-
-(* jww (2018-06-21): Make this an inductive definition, which removes our need
-   to use fuel. *)
-(* jww (2018-06-21): Change all_refinable to work on a union of effs and
-   effs. *)
-Fixpoint refineG {effs effs' a}
-         (n : nat)
-         (all_refinable : forall eff,
-             In eff effs + In eff effs' -> Refines eff)
-         (old : Eff effs a) (new : Eff effs' a) : Prop.
-Proof.
-  destruct n.
-    exact False.
-  destruct old, new.
-  - exact (a0 = a1).
-  - induction effs'; [now inversion u|].
-    inversion u; subst; clear u.
-      pose proof (all_refinable a1 (inr (in_eq _ _))).
-      exact (refineG _ _ _ n all_refinable (Pure a0) (f (` (candidate X)))).
-    apply IHeffs'; intuition.
-    exact (Pure a0).
-  - induction effs; [now inversion u|].
-    inversion u; subst; clear u.
-      pose proof (all_refinable a1 (inl (in_eq _ _))).
-      exact (refineG _ _ _ n all_refinable (f (` (candidate X))) (Pure a0)).
-    apply IHeffs; intuition.
-    exact (Pure a0).
-  - induction effs;  [now inversion u|].
-    induction effs'; [now inversion u0|].
-    inversion u; subst; clear u.
-      pose proof (all_refinable a0 (inl (in_eq _ _))).
-      inversion u0; subst; clear u0.
-        pose proof (all_refinable a1 (inr (in_eq _ _))).
-        exact (refineG _ _ _ n all_refinable
-                       (f (` (candidate X))) (f0 (` (candidate X1)))).
-      apply IHeffs'; intuition; intros.
-      admit.
-    eapply IHeffs; intuition; intros.
-    admit.
-Admitted.
 
 (* This is supposed to be the effect handler for non-deterministic choice,
    which simply denotes the choice as a propositional relation in Gallina over
@@ -732,3 +684,146 @@ Inductive choose {a r} : Eff (Choice :: r) a -> Eff r a -> Prop :=
       (* jww (2018-06-19): This is all wrong, more work to be done *)
       choose (k v) (Impure u Pure) ->
       choose (Impure (UThat u) k) (Impure u Pure).
+
+Class Relates (eff : Type -> Type) := {
+  relates : forall a, eff a -> a -> Prop
+}.
+
+Arguments relates {eff _ a} _ _.
+
+Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
+  (* Gallina terms can only refine by equality *)
+  | PurePure : forall l r : a,
+      l = r
+        -> refine (Pure l) (Pure r)
+
+  (* A Gallina term may be refined into an effectful term, if computation of
+     those effects reduces to that term. *)
+  | PureImpure :
+      forall (l : a) x (u : Union effs' x) (k : x -> Eff effs' a)
+             (eff' : Type -> Type)
+             `{Relation' : Relates eff'}
+             `{Membership' : Member eff' effs'}
+             (f : eff' x), prj u = Some f -> forall (y : x), relates f y
+        -> refine (Pure l) (k y)
+        -> refine (Pure l) (Impure u k)
+
+  (* An effectful term may refine to Gallina term, if that Gallina term is
+     within the range of what it may compute to. This is equivalent to
+     refining to the "identity" effect. *)
+  | ImpurePure :
+      forall x (u : Union effs x) (k : x -> Eff effs a) (r : a)
+             (eff : Type -> Type)
+             `{Relation : Relates eff}
+             `{Membership : Member eff effs}
+             (f : eff x), prj u = Some f -> forall (y : x), relates f y
+        -> refine (k y) (Pure r)
+        -> refine (Impure u k) (Pure r)
+
+  | LeftImpure :
+      forall x (u : Union effs x) (k : x -> Eff effs a)
+             (eff : Type -> Type)
+             `{Relation : Relates eff}
+             `{Membership : Member eff effs}
+             (f : eff x), prj u = Some f -> forall (y : x), relates f y ->
+      forall x' (u' : Union effs' x') (k' : x' -> Eff effs' a),
+           refine (k y) (Impure u' k')
+        -> refine (Impure u k) (Impure u' k')
+
+  | RightImpure :
+      forall x (u : Union effs x) (k : x -> Eff effs a)
+             x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
+             (eff' : Type -> Type)
+             `{Relation : Relates eff'}
+             `{Membership : Member eff' effs'}
+             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y' ->
+           refine (Impure u k) (k' y')
+        -> refine (Impure u k) (Impure u' k')
+
+  (* An effectful term may refine to another effectful term, if what the other
+     term relates to is within the range of what the first term may compute
+     to. This expresses computational refinement. *)
+  | ImpureImpure :
+      forall x (u : Union effs x) (k : x -> Eff effs a)
+             (eff : Type -> Type)
+             `{Relation : Relates eff}
+             `{Membership : Member eff effs}
+             (f : eff x), prj u = Some f -> forall (y : x), relates f y ->
+      forall x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
+             (eff' : Type -> Type)
+             `{Relation' : Relates eff'}
+             `{Membership' : Member eff' effs'}
+             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y'
+        -> refine (k y) (k' y')
+        -> refine (Impure u k) (Impure u' k').
+
+Hint Constructors refine.
+
+Arguments ImpurePure {effs effs' a x u k r eff Relation Membership} _ _ _ _ _.
+
+Program Instance Choice_Relates : Relates Choice := {
+  relates := fun _ '(Pick P) x => P x
+}.
+
+Program Instance State_Relates {s : Type} : Relates (State s) := {
+  relates := fun _ f x => exists s, snd (State_func f s) = x
+}.
+
+Ltac find_term x :=
+  lazymatch x with
+  | UThat ?u => find_term u
+  | UThis ?t => constr:(t)
+  end.
+
+Ltac find_membership x :=
+  lazymatch x with
+  | UThat ?u =>
+    let H := find_membership u in
+    constr:(Member_Next _ _ _ H)
+  | UThis _ =>
+    constr:(Member_Here _ _)
+  end.
+
+Tactic Notation "pick_left" constr(H) :=
+  match goal with
+  | [ |- refine (Impure ?X _) (Pure _) ] =>
+    let t := find_term X in
+    eapply ImpurePure with (f:=t) (y:=H); simpl; eauto
+  | [ |- refine (Impure ?X _) (Impure _ _) ] =>
+    let t := find_term X in
+    eapply LeftImpure with (f:=t) (y:=H); simpl; eauto
+  end; simpl.
+
+Tactic Notation "pick_right" constr(H) :=
+  match goal with
+  | [ |- refine (Pure _) (Impure ?Y _) ] =>
+    let t' := find_term Y in
+    eapply PureImpure with (f':=t') (y':=H); simpl; eauto
+  | [ |- refine (Impure _ _) (Impure ?Y _) ] =>
+    let t' := find_term Y in
+    eapply RightImpure with (f':=t') (y':=H); simpl; eauto
+  end; simpl.
+
+Tactic Notation "pick_both" constr(H) constr(H') :=
+  match goal with
+  | [ |- refine (Impure ?X _) (Impure ?Y _) ] =>
+    let t  := find_term X in
+    let t' := find_term Y in
+    eapply ImpureImpure with (f:=t) (y:=H) (f':=t') (y':=H'); simpl; eauto
+  end; simpl.
+
+Example refine_works :
+  refine (send (Put 10) ;;
+          x <- send Get ;
+          y <- send (Pick (fun x => x <= 10));
+          pure (x + y)      : Eff [Choice; State (nat : Type)] nat)
+
+         (y <- send (Pick (fun x => x <= 10));
+          pure y            : Eff [Choice] nat).
+Proof.
+  simpl.
+  pick_left tt.                 (* Put always return unit *)
+    now exists 0.
+  pick_left 10.                 (* Satisfy the Get request with some answer *)
+  pick_both 0 10; omega.        (* Satisfy the two picks in a way that works *)
+Qed.
