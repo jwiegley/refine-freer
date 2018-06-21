@@ -700,13 +700,13 @@ Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
   (* A Gallina term may be refined into an effectful term, if computation of
      those effects reduces to that term. *)
   | PureImpure :
-      forall (l : a) x (u : Union effs' x) (k : x -> Eff effs' a)
+      forall (l : a) x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
              (eff' : Type -> Type)
              `{Relation' : Relates eff'}
              `{Membership' : Member eff' effs'}
-             (f : eff' x), prj u = Some f -> forall (y : x), relates f y
-        -> refine (Pure l) (k y)
-        -> refine (Pure l) (Impure u k)
+             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y'
+        -> refine (Pure l) (k' y')
+        -> refine (Pure l) (Impure u' k')
 
   (* An effectful term may refine to Gallina term, if that Gallina term is
      within the range of what it may compute to. This is equivalent to
@@ -720,6 +720,9 @@ Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
         -> refine (k y) (Pure r)
         -> refine (Impure u k) (Pure r)
 
+  (* An effectful term may refine to another effectful term, if what the other
+     term relates to is within the range of what the first term may compute
+     to. This expresses computational refinement. *)
   | LeftImpure :
       forall x (u : Union effs x) (k : x -> Eff effs a)
              (eff : Type -> Type)
@@ -738,23 +741,6 @@ Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
              `{Membership : Member eff' effs'}
              (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y' ->
            refine (Impure u k) (k' y')
-        -> refine (Impure u k) (Impure u' k')
-
-  (* An effectful term may refine to another effectful term, if what the other
-     term relates to is within the range of what the first term may compute
-     to. This expresses computational refinement. *)
-  | ImpureImpure :
-      forall x (u : Union effs x) (k : x -> Eff effs a)
-             (eff : Type -> Type)
-             `{Relation : Relates eff}
-             `{Membership : Member eff effs}
-             (f : eff x), prj u = Some f -> forall (y : x), relates f y ->
-      forall x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
-             (eff' : Type -> Type)
-             `{Relation' : Relates eff'}
-             `{Membership' : Member eff' effs'}
-             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y'
-        -> refine (k y) (k' y')
         -> refine (Impure u k) (Impure u' k').
 
 Hint Constructors refine.
@@ -785,7 +771,7 @@ Ltac find_membership x :=
   end.
 
 Tactic Notation "pick_left" constr(H) :=
-  match goal with
+  lazymatch goal with
   | [ |- refine (Impure ?X _) (Pure _) ] =>
     let t := find_term X in
     eapply ImpurePure with (f:=t) (y:=H); simpl; eauto
@@ -794,22 +780,14 @@ Tactic Notation "pick_left" constr(H) :=
     eapply LeftImpure with (f:=t) (y:=H); simpl; eauto
   end; simpl.
 
-Tactic Notation "pick_right" constr(H) :=
-  match goal with
+Tactic Notation "pick_right" constr(H') :=
+  lazymatch goal with
   | [ |- refine (Pure _) (Impure ?Y _) ] =>
     let t' := find_term Y in
-    eapply PureImpure with (f':=t') (y':=H); simpl; eauto
+    eapply PureImpure with (f':=t') (y':=H'); simpl; eauto
   | [ |- refine (Impure _ _) (Impure ?Y _) ] =>
     let t' := find_term Y in
-    eapply RightImpure with (f':=t') (y':=H); simpl; eauto
-  end; simpl.
-
-Tactic Notation "pick_both" constr(H) constr(H') :=
-  match goal with
-  | [ |- refine (Impure ?X _) (Impure ?Y _) ] =>
-    let t  := find_term X in
-    let t' := find_term Y in
-    eapply ImpureImpure with (f:=t) (y:=H) (f':=t') (y':=H'); simpl; eauto
+    eapply RightImpure with (f':=t') (y':=H'); simpl; eauto
   end; simpl.
 
 Example refine_works :
@@ -825,5 +803,6 @@ Proof.
   pick_left tt.                 (* Put always return unit *)
     now exists 0.
   pick_left 10.                 (* Satisfy the Get request with some answer *)
-  pick_both 0 10; omega.        (* Satisfy the two picks in a way that works *)
+  pick_left 0; [omega|].
+  pick_right 10.
 Qed.
