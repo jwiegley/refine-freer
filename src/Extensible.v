@@ -692,36 +692,26 @@ Class Relates (eff : Type -> Type) := {
 Arguments relates {eff _ a} _ _.
 
 Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
-  (* Gallina terms can only refine by equality *)
-  | PurePure : forall l r : a,
-      l = r
-        -> refine (Pure l) (Pure r)
+  | PurePure : forall l r : a, l = r -> refine (Pure l) (Pure r)
 
-  (* An effectful term may refine to another effectful term, if what the other
-     term relates to is within the range of what the first term may compute
-     to. This expresses computational refinement. *)
   | LeftImpure :
-      forall x (u : Union effs x) (k : x -> Eff effs a) r
-             (eff : Type -> Type)
-             `{Relation : Relates eff}
-             `{Membership : Member eff effs}
-             (f : eff x), prj u = Some f -> forall (y : x), relates f y
-        -> refine (k y) r
-        -> refine (Impure u k) r
+      forall x (u : Union effs x) (k : x -> Eff effs a),
+      forall `{Membership : Member eff effs}
+             (f : eff x), prj u = Some f ->
+      forall `{Relation : Relates eff} (y : x), relates f y ->
+      forall r, refine (k y) r -> refine (Impure u k) r
 
   | RightImpure :
-      forall l x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
-             (eff' : Type -> Type)
-             `{Relation : Relates eff'}
-             `{Membership : Member eff' effs'}
-             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y' ->
-           refine l (k' y')
-        -> refine l (Impure u' k').
+      forall x' (u' : Union effs' x') (k' : x' -> Eff effs' a),
+      forall `{Membership : Member eff' effs'}
+             (f' : eff' x'), prj u' = Some f' ->
+      forall `{Relation : Relates eff'} (y' : x'), relates f' y' ->
+      forall l, refine l (k' y') -> refine l (Impure u' k').
 
 Hint Constructors refine.
 
 Program Instance Choice_Relates : Relates Choice := {
-  relates := fun _ '(Pick P) x => P x
+  relates := fun _ '(Pick P) => P
 }.
 
 Program Instance State_Relates {s : Type} : Relates (State s) := {
@@ -750,12 +740,54 @@ Tactic Notation "pick_left" constr(H) :=
     eapply LeftImpure with (f:=t) (y:=H); simpl; eauto
   end; simpl.
 
+Tactic Notation "epick_left" :=
+  lazymatch goal with
+  | [ |- refine (Impure ?X _) _ ] =>
+    let t := find_term X in
+    eapply LeftImpure with (f:=t); simpl; eauto
+  end; simpl.
+
 Tactic Notation "pick_right" constr(H') :=
   lazymatch goal with
   | [ |- refine _ (Impure ?Y _) ] =>
     let t' := find_term Y in
     eapply RightImpure with (f':=t') (y':=H'); simpl; eauto
   end; simpl.
+
+Tactic Notation "epick_right" :=
+  lazymatch goal with
+  | [ |- refine _ (Impure ?Y _) ] =>
+    let t' := find_term Y in
+    eapply RightImpure with (f':=t'); simpl; eauto
+  end; simpl.
+
+Lemma refine_matched `{Relates t}
+      `(xu : Union (t :: effs)  a) `(xk : a -> Eff (t :: effs)  b)
+      `(yu : Union (t :: effs') a) `(yk : a -> Eff (t :: effs') b) :
+  forall x, prj (Member:=Member_Here _ _) xu = Some x ->
+  forall y, prj (Member:=Member_Here _ _) yu = Some y ->
+       x = y
+    -> (exists v, relates x v /\ relates y v /\ refine (xk v) (yk v))
+    -> refine (Impure xu xk) (Impure yu yk).
+Proof.
+  intros.
+  subst.
+  repeat match goal with
+         | [ H : exists _ : _, _ |- _ ] => destruct H
+         | [ H : _ /\ _ |- _ ] => destruct H
+         end.
+  now econstructor; eauto.
+Qed.
+
+Hint Extern 3 (prj ?X = Some _) =>
+  let t := find_term X in instantiate (1:=t); auto.
+
+Ltac refinement :=
+  repeat
+    lazymatch goal with
+    | [ |- refine (Impure ?X _) (Impure ?Y _) ] =>
+      eapply refine_matched; eauto
+    end.
 
 Example refine_works :
   refine (send (Put 10) ;;
@@ -767,9 +799,10 @@ Example refine_works :
           pure y            : Eff [Choice] nat).
 Proof.
   simpl.
-  pick_left tt.                 (* Put always return unit *)
+  epick_left.                   (* Put always return unit *)
     now exists 0.
-  pick_left 10.                 (* Satisfy the Get request with some answer *)
-  pick_left 0; [omega|].
-  pick_right 10.
+  pick_left 0.                  (* Satisfy the Get request with some answer *)
+  refinement.
+  exists 5.
+  repeat (split; simpl; try omega; auto).
 Qed.
