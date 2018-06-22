@@ -697,55 +697,28 @@ Inductive refine {effs effs' a} : Eff effs a -> Eff effs' a -> Prop :=
       l = r
         -> refine (Pure l) (Pure r)
 
-  (* A Gallina term may be refined into an effectful term, if computation of
-     those effects reduces to that term. *)
-  | PureImpure :
-      forall (l : a) x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
-             (eff' : Type -> Type)
-             `{Relation' : Relates eff'}
-             `{Membership' : Member eff' effs'}
-             (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y'
-        -> refine (Pure l) (k' y')
-        -> refine (Pure l) (Impure u' k')
-
-  (* An effectful term may refine to Gallina term, if that Gallina term is
-     within the range of what it may compute to. This is equivalent to
-     refining to the "identity" effect. *)
-  | ImpurePure :
-      forall x (u : Union effs x) (k : x -> Eff effs a) (r : a)
-             (eff : Type -> Type)
-             `{Relation : Relates eff}
-             `{Membership : Member eff effs}
-             (f : eff x), prj u = Some f -> forall (y : x), relates f y
-        -> refine (k y) (Pure r)
-        -> refine (Impure u k) (Pure r)
-
   (* An effectful term may refine to another effectful term, if what the other
      term relates to is within the range of what the first term may compute
      to. This expresses computational refinement. *)
   | LeftImpure :
-      forall x (u : Union effs x) (k : x -> Eff effs a)
+      forall x (u : Union effs x) (k : x -> Eff effs a) r
              (eff : Type -> Type)
              `{Relation : Relates eff}
              `{Membership : Member eff effs}
-             (f : eff x), prj u = Some f -> forall (y : x), relates f y ->
-      forall x' (u' : Union effs' x') (k' : x' -> Eff effs' a),
-           refine (k y) (Impure u' k')
-        -> refine (Impure u k) (Impure u' k')
+             (f : eff x), prj u = Some f -> forall (y : x), relates f y
+        -> refine (k y) r
+        -> refine (Impure u k) r
 
   | RightImpure :
-      forall x (u : Union effs x) (k : x -> Eff effs a)
-             x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
+      forall l x' (u' : Union effs' x') (k' : x' -> Eff effs' a)
              (eff' : Type -> Type)
              `{Relation : Relates eff'}
              `{Membership : Member eff' effs'}
              (f' : eff' x'), prj u' = Some f' -> forall (y' : x'), relates f' y' ->
-           refine (Impure u k) (k' y')
-        -> refine (Impure u k) (Impure u' k').
+           refine l (k' y')
+        -> refine l (Impure u' k').
 
 Hint Constructors refine.
-
-Arguments ImpurePure {effs effs' a x u k r eff Relation Membership} _ _ _ _ _.
 
 Program Instance Choice_Relates : Relates Choice := {
   relates := fun _ '(Pick P) x => P x
@@ -772,20 +745,14 @@ Ltac find_membership x :=
 
 Tactic Notation "pick_left" constr(H) :=
   lazymatch goal with
-  | [ |- refine (Impure ?X _) (Pure _) ] =>
-    let t := find_term X in
-    eapply ImpurePure with (f:=t) (y:=H); simpl; eauto
-  | [ |- refine (Impure ?X _) (Impure _ _) ] =>
+  | [ |- refine (Impure ?X _) _ ] =>
     let t := find_term X in
     eapply LeftImpure with (f:=t) (y:=H); simpl; eauto
   end; simpl.
 
 Tactic Notation "pick_right" constr(H') :=
   lazymatch goal with
-  | [ |- refine (Pure _) (Impure ?Y _) ] =>
-    let t' := find_term Y in
-    eapply PureImpure with (f':=t') (y':=H'); simpl; eauto
-  | [ |- refine (Impure _ _) (Impure ?Y _) ] =>
+  | [ |- refine _ (Impure ?Y _) ] =>
     let t' := find_term Y in
     eapply RightImpure with (f':=t') (y':=H'); simpl; eauto
   end; simpl.
