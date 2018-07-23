@@ -764,6 +764,12 @@ Inductive choose {a r} : Eff (Choice :: r) a -> Eff r a -> Prop :=
       choose (k v) (Impure u Pure) ->
       choose (Impure (UThat u) k) (Impure u Pure).
 
+Class Computes (eff : Type -> Type) := {
+  computes : forall a, eff a -> a -> Prop
+}.
+
+Arguments computes {eff _ a} _ _.
+
 Class Relates (eff eff' : Type -> Type) := {
   relates : forall a, eff a -> eff' a -> Prop
 }.
@@ -860,14 +866,19 @@ Definition handleAll `(f : Eff effs a)
 Proof.
 Abort.
 
-Inductive relate {effs a} : Eff effs a -> a -> Prop :=
-  | RelPure : forall v, relate (Pure v) v
-  | RelImpure :
+Inductive relate {a} : forall effs, Eff effs a -> a -> Prop :=
+  | RelPure : forall effs v, relate effs (Pure v) v
+  | RelImpureHere :
       (* An effectful action relates to a final value if there exists an
          intermediate state that continues on to produce the value. *)
-      forall `{Member eff effs}
-             x (u : Union effs x) (k : x -> Eff effs a) i v,
-        relate (k i) v -> relate (Impure u k) v.
+      forall effs `{Computes eff} `{Computes (Union effs)}
+             x (u : Union (eff :: effs) x) (k : x -> Eff (eff :: effs) a)
+             i v,
+        match decomp u with
+        | inl c => computes c i
+        | inr c => computes c i
+        end ->
+        relate _ (k i) v -> relate _ (Impure u k) v.
 
 Example relate_ex :
   relate (send (Put 10) ;;
