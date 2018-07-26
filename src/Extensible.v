@@ -653,116 +653,11 @@ Next Obligation.
   exact tt.
 Defined.
 
-Program Fixpoint reduction {s a}
-        (act : Eff [Choice; State s] a) (res : a) : Prop :=
-  match act with
-  | Pure x => x = res
-  | Impure u k =>
-    match decomp u with
-    | inl (Pick P) => exists v, P v /\ reduction (k v) res
-    | inr u' =>
-      match decomp u' with
-      | inl f => exists s, reduction (k (snd (State_func f s))) res
-      | inr u' => False_rect _ (Union_empty _ u')
-      end
-    end
-  end.
-
-Example reduction_works :
-  reduction (s:=nat) (send (Put 10) ;;
-                      x <- send Get ;
-                      y <- send (Pick (fun x => x < 10));
-                      pure (x + y)) 15.
-Proof.
-  simpl.
-  exists 0, 10, 5.
-  omega.
-Qed.
-
 Program Fixpoint raise {e} `(f : Eff effs a) : Eff (e :: effs) a :=
   match f with
   | Pure x => Pure x
   | Impure u k => Impure (weaken u) (fun x => raise (k x))
   end.
-
-Local Obligation Tactic := program_simpl; try (eapply Union_empty; eauto).
-
-Program Fixpoint refine_fiat {s s' a} (AbsR : s -> s' -> Prop)
-        (n : nat)
-        (old : Eff [Choice; State s] a)
-        (new : Eff [Choice; State s'] a) : Prop :=
-  match n with
-  | O => False
-  | S n' =>
-    match old, new with
-    | Pure x, Pure y => x = y
-
-    | Pure x, Impure u k =>
-      match decomp u with
-      | inl (Pick P) => exists v, P v /\ refine_fiat AbsR n' old (k v)
-      | inr u' =>
-        match decomp u' with
-        | inl f => exists s,
-           refine_fiat AbsR n' old (k (_ (snd (State_func f s))))
-        | inr u' => !
-        end
-      end
-
-    | Impure u k, Pure y =>
-      match decomp u with
-      | inl (Pick P) => exists v, P v /\ refine_fiat AbsR n' (k v) new
-      | inr u' =>
-        match decomp u' with
-        | inl f => exists s,
-           refine_fiat AbsR n' (k (_ (snd (State_func f s)))) new
-        | inr u' => !
-        end
-      end
-
-    | Impure xu xk, Impure yu yk =>
-      match decomp xu, decomp yu with
-      | inl f, inl g => refineChoice f (_ g)
-
-      | inl (Pick P), inr yu' =>
-        match decomp yu' with
-        | inl g => exists v s,
-            P v /\ refine_fiat AbsR n' (xk v) (yk (_ (snd (State_func g s))))
-        | inr u' => !
-        end
-
-      | inr xu', inl (Pick P) =>
-        match decomp xu' with
-        | inl f => exists v s,
-            P v /\ refine_fiat AbsR n' (xk (_ (snd (State_func f s)))) (yk v)
-        | inr u' => !
-        end
-
-      | inr xu', inr yu' =>
-        match decomp xu', decomp yu' with
-        | inl f, inl g => exists s s', AbsR s s' ->
-           refine_fiat AbsR n' (xk (_ (snd (State_func f s))))
-                          (yk (_ (snd (State_func g s'))))
-        | inl _,   inr yu' => !
-        | inr xu', inl _   => !
-        | inr xu', inr _   => !
-        end
-      end
-    end
-  end.
-
-(* This is supposed to be the effect handler for non-deterministic choice,
-   which simply denotes the choice as a propositional relation in Gallina over
-   the remaining effects to be handled. *)
-Inductive choose {a r} : Eff (Choice :: r) a -> Eff r a -> Prop :=
-  | PureChoice : forall x,
-      choose (Pure x) (Pure x)
-  | ImpureChoiceThis : forall A (P : A -> Prop) v k x,
-      P v -> choose (k v) x ->
-      choose (Impure (UThis (Pick P)) k) x
-  | ImpureChoiceThat : forall u k v,
-      (* jww (2018-06-19): This is all wrong, more work to be done *)
-      choose (k v) (Impure u Pure) ->
-      choose (Impure (UThat u) k) (Impure u Pure).
 
 Class Computes (eff : Type -> Type) := {
   computes : forall a, eff a -> a -> Prop
@@ -866,19 +761,34 @@ Definition handleAll `(f : Eff effs a)
 Proof.
 Abort.
 
-Inductive relate {a} : forall effs, Eff effs a -> a -> Prop :=
-  | RelPure : forall effs v, relate effs (Pure v) v
-  | RelImpureHere :
-      (* An effectful action relates to a final value if there exists an
-         intermediate state that continues on to produce the value. *)
-      forall effs `{Computes eff} `{Computes (Union effs)}
-             x (u : Union (eff :: effs) x) (k : x -> Eff (eff :: effs) a)
-             i v,
-        match decomp u with
-        | inl c => computes c i
-        | inr c => computes c i
-        end ->
-        relate _ (k i) v -> relate _ (Impure u k) v.
+Program Instance Union_Here_Computes :
+  (forall eff, In eff effs -> Computes eff) -> Computes (Union effs) := {
+  computes := fun _ u v => _
+}.
+Next Obligation.
+  induction effs; intros.
+    inversion u.
+  inversion u; subst; clear u.
+Admitted.
+
+Inductive relate {a} : forall {effs}, Eff effs a -> a -> Prop :=
+  | RelatePure : forall effs v, relate (effs:=effs) (Pure v) v
+
+  | RelateImpureThis :
+      forall `{Computes eff} effs v
+             x u (k : x -> Eff (eff :: effs) a),
+        forall i, computes u i -> relate (k i) v ->
+        relate (Impure (UThis u) k) v
+
+  | RelateImpureThat :
+      forall eff effs v
+             x u (k : x -> Eff (eff :: effs) a) ret bind,
+        relate (Impure u (fun x => handleRelay ret bind (k x))) v ->
+        relate (Impure (UThat u) k) v.
+
+Program Instance State_Computes {s} : Computes (State s) := {
+  computes := fun _ a v => exists s, snd (State_func a s) = v
+}.
 
 Example relate_ex :
   relate (send (Put 10) ;;
@@ -888,9 +798,16 @@ Example relate_ex :
          15.
 Proof.
   simpl.
-  repeat econstructor; eauto.
+  eapply RelateImpureThat with (ret:=pure); simpl.
+  unfold Ltac.comp; simpl.
+  unfold eq_rect_r, eq_rect, eq_sym; simpl.
+  unfold Ltac.comp; simpl.
+  repeat econstructor; eauto; simpl.
   instantiate (1 := 10).
-  instantiate (1 := 5).
+  simpl.
+  instantiate (1 := pure); simpl.
+  Set Printing All.
+  instantiate (1 := ); simpl.
   constructor.
 Qed.
 
