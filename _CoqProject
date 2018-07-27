@@ -1,1 +1,7 @@
-src/Extensible.v
+src/Freer.v
+src/Union.v
+src/Member.v
+src/Comp.v
+src/Choice.v
+src/RWS.v
+src/Refinement.v
