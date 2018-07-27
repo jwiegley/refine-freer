@@ -6,7 +6,8 @@ Require Import
   Hask.Control.Monad.
 
 Require Export
-  Member.
+  Member
+  Comp.
 
 Import ListNotations.
 Import EqNotations.
@@ -49,3 +50,42 @@ Inductive interpP {effs state a}
         interpP interpE (Impure u k) val pre post
   | interpP_Pure : forall val pre post,
       interpP interpE (Pure val) val pre post.
+
+Require Import
+  RWS.
+
+(* This theorem present the meaning of state, interpreted as an "effect" on an
+   input state and resulting in a final value. *)
+Theorem meaning_of_State {s v} (f : State s v) (x : v) (start : s) :
+  interpP
+    (fun v (st : State s v) (x : v) (pre : s) (post : s) =>
+       match st in State _ v' return v' = v -> _ with
+       | Get   => fun H => post = pre /\ x = rew H in post
+       | Put p => fun H => post = p   /\ x = rew H in tt
+       end eq_refl)
+    (sendF f)
+    (match f in State _ v' return v' = v -> _ with
+     | Get   => fun H => start
+     | Put p => fun H => tt
+     end eq_refl)
+    start
+    (match f in State _ v' return v' = v -> _ with
+     | Get   => fun H => start
+     | Put p => fun H => p
+     end eq_refl).
+Proof.
+  unfold sendF.
+  induction f; simpl;
+  eapply interpP_Impure; eauto;
+  eapply interpP_Pure.
+Qed.
+
+Theorem final {a} {x : Eff [] a} {v state} {pre post : state} :
+  run x = v ->
+  interpP (fun _ u _ _ _ => False_rect _ (Union_empty _ u)) x v pre post.
+Proof.
+  simpl; intros; subst.
+  induction x; simpl.
+    now apply interpP_Pure.
+  now inversion f.
+Qed.

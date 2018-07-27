@@ -1,12 +1,15 @@
 { packages ? "coqPackages_8_7"
+
 , rev      ? "d7d31fea7e7eef8ff4495e75be5dcbb37fb215d0"
 , sha256   ? "1ghb1nhgfx3r2rl501r8k0akmfjvnl9pis92if35pawsxgp115kv"
-, pkgs     ? import (builtins.fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
-    inherit sha256; }) {
-    config.allowUnfree = true;
-    config.allowBroken = false;
-  }
+
+, pkgs     ? (import <darwin> {}).pkgs
+# , pkgs     ? import (builtins.fetchTarball {
+#     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
+#     inherit sha256; }) {
+#     config.allowUnfree = true;
+#     config.allowBroken = false;
+#   }
 }:
 
 with pkgs.${packages}; pkgs.stdenv.mkDerivation rec {
@@ -16,10 +19,9 @@ with pkgs.${packages}; pkgs.stdenv.mkDerivation rec {
   src =
     if pkgs.lib.inNixShell
     then null
-    else
-    if pkgs ? coqFilterSource
-    then pkgs.coqFilterSource [] ./.
-    else ./.;
+    else if pkgs ? coqFilterSource
+         then pkgs.coqFilterSource [] ./.
+         else ./.;
 
   buildInputs = [
     coq coq.ocaml coq.camlp5 coq.findlib
