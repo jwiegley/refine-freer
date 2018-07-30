@@ -87,6 +87,15 @@ Defined.
 (* Program Fixpoint runWriterC' `(f : Freer (Union (Writer o :: r)) a) := *)
 (*   runFreer (fun a => list o * a)%type f (fun _ '(Tell x) => tt) _. *)
 
+Definition runWriterP {o r a} :
+  Eff (Writer o :: r) a -> Eff r (list o * a) -> Prop :=
+  handleRelayP
+    (fun x r => r = Pure ([], x))
+    (fun t x v =>
+       match x in Writer _ a' return a' = t -> _ with
+       | Tell s' => fun H => v = rew H in tt
+       end eq_refl).
+
 (************************************************************************)
 
 Program Fixpoint runGetPut {e : Type} (x : e)
@@ -100,7 +109,7 @@ Program Fixpoint runGetPut {e : Type} (x : e)
     | inr u =>
       match decomp u with
       | inl f => runGetPut x (k _)
-      | inr u => Impure u (fun y => runGetPut x (k y))
+      | inr u => Impure u (runGetPut x \o k)
       end
     end
   end.
@@ -142,3 +151,13 @@ Definition refineState {s s' a} (AbsR : s -> s' -> Prop) :
     let ro := State_func old s  in
     let rn := State_func new s' in
     AbsR (fst ro) (fst rn) /\ snd ro = snd rn.
+
+Definition runStateP {s r a} :
+  s -> Eff (State s :: r) a -> Eff r (s * a) -> Prop :=
+  handleRelaySP
+    (fun s x r => r = Pure (s, x))
+    (fun t s x s' v =>
+       match x in State _ a' return a' = t -> _ with
+       | Get   => fun H => s' = s /\ v = rew H in s
+       | Put z => fun H => s' = z /\ v = rew [id] H in tt
+       end eq_refl).

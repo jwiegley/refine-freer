@@ -206,6 +206,15 @@ Fixpoint iter `{Functor f} `(phi : f a -> a) (fr : Freer f a) : a :=
     | Impure h g => phi (fmap (iter phi \o g) h)
   end.
 
+Inductive iterP `{Functor f} `(phi : f a -> a -> Prop) :
+  Freer f a -> a -> Prop :=
+  | IterPure : forall x,
+      iterP phi (Pure x) x
+  | IterImpure : forall h g x r,
+      phi h x ->
+      iterP phi (g x) r ->
+      iterP phi (Impure h g) r.
+
 Definition liftF {f : Type -> Type} {a : Type} : f a -> Freer f a :=
   fun x => Impure x Pure.
 
@@ -230,6 +239,17 @@ Fixpoint foldFree `{Monad m} `(n : forall x, f x -> m x) `(fr : Freer f a) :
   | Pure x => pure x
   | Impure h g => join (fmap (foldFree n \o g) (n _ h))
   end.
+
+(*
+Inductive foldFreeP `{Monad m} `(phi : forall x, f x -> m x -> Prop) {a} :
+  Freer f a -> m a -> Prop :=
+  | FoldPure : forall x,
+      foldFreeP phi (Pure x) (pure x)
+  | FoldImpure : forall t h g x r,
+      phi t h x ->
+      foldFreeP phi (x >>= g) r ->
+      foldFreeP phi (Impure (x:=t) h g) r.
+*)
 
 Fixpoint cutoff (n : nat) `(fr : Freer f a) : Freer f (option a) :=
   match n with

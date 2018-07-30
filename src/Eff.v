@@ -100,6 +100,20 @@ Fixpoint handleRelay {eff effs a b}
     end
   end.
 
+Inductive handleRelayP {eff effs a b}
+          (retP : a -> Eff effs b -> Prop)
+          (bindP : forall v, eff v -> v -> Prop) :
+          Eff (eff :: effs) a -> Eff effs b -> Prop :=
+  | HandlePure : forall x r,
+      retP x r -> handleRelayP retP bindP (Pure x) r
+  | HandleThis : forall t u v q r,
+      bindP t u v ->
+      handleRelayP retP bindP (q v) r ->
+      handleRelayP retP bindP (Impure (x:=t) (UThis u) q) r
+  | HandleThat : forall t u q k,
+      (forall y, handleRelayP retP bindP (q y) (k y)) ->
+      handleRelayP retP bindP (Impure (x:=t) (UThat u) q) (Impure (x:=t) u k).
+
 Fixpoint handleRelayS {eff effs s a b}
          (st : s)
          (ret : s -> a -> Eff effs b)
@@ -114,6 +128,20 @@ Fixpoint handleRelayS {eff effs s a b}
     | inr u => Impure u (k st)
     end
   end.
+
+Inductive handleRelaySP {eff effs s a b}
+          (retP : s -> a -> Eff effs b -> Prop)
+          (bindP : forall v, s -> eff v -> s -> v -> Prop) :
+          s -> Eff (eff :: effs) a -> Eff effs b -> Prop :=
+  | HandlePureS : forall st x r,
+      retP st x r -> handleRelaySP retP bindP st (Pure x) r
+  | HandleThisS : forall st st' t u v q r,
+      bindP t st u st' v ->
+      handleRelaySP retP bindP st' (q v) r ->
+      handleRelaySP retP bindP st (Impure (x:=t) (UThis u) q) r
+  | HandleThatS : forall st t u q k,
+      (forall st y, handleRelaySP retP bindP st (q y) (k y)) ->
+      handleRelaySP retP bindP st (Impure (x:=t) (UThat u) q) (Impure (x:=t) u k).
 
 Definition interpretWith {eff effs a}
            (bind : forall v, eff v -> Arr effs v a -> Eff effs a) :

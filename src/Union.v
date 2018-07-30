@@ -1,7 +1,8 @@
 Require Import
   Coq.Program.Program
   Coq.Program.Tactics
-  Coq.Lists.List.
+  Coq.Lists.List
+  Hask.Control.Monad.
 
 Import ListNotations.
 
@@ -14,7 +15,7 @@ Inductive UnionF (a : Type) : list (Type -> Type) -> Type :=
 Arguments UThis {a t r} _.
 Arguments UThat {a t r} _.
 
-Definition Union (r : list (Type -> Type)) (a : Type) := UnionF a r.
+Definition Union (r : list (Type -> Type)) (a : Type) : Type := UnionF a r.
 
 Lemma Union_empty : forall a, Union [] a -> False.
 Proof. inversion 1. Qed.
@@ -56,3 +57,24 @@ Fixpoint inject_last  (t : Type -> Type) (r : list (Type -> Type))
   | [] => UThis x
   | _ :: xs => UThat (inject_last t xs x)
   end.
+
+(*
+(** [Union effs] is a Functor iff every eff in [effs] is a Functor. *)
+Program Instance Union_Functor {r : list (Type -> Type)} :
+  (forall x, In x r -> Functor x) -> Functor (Union r) := {
+  fmap := fun _ _ f u => _
+}.
+Next Obligation.
+  induction r.
+    inversion u.
+  destruct (decomp u).
+    unshelve eapply (fmap f) in a0.
+      apply H.
+      now constructor.
+    now left.
+  right.
+  apply IHr; auto; intros.
+  apply H.
+  now right.
+Defined.
+*)

@@ -25,17 +25,11 @@ Inductive refineChoice {a} : Choice a -> Choice a -> Prop :=
   RefineChoice : forall old new, (forall v, new ↝ v -> old ↝ v) ->
      refineChoice (Pick new) (Pick old).
 
-Class Computes (eff : Type -> Type) := {
-  computes : forall a, eff a -> a -> Prop
+Class Computes (s : Type) (eff : Type -> Type) := {
+  computes : forall a, s -> eff a -> s -> a -> Prop
 }.
 
-Arguments computes {eff _ a} _ _.
-
-Class Relates (eff eff' : Type -> Type) := {
-  relates : forall a, eff a -> eff' a -> Prop
-}.
-
-Arguments relates {eff eff' _ a} _ _.
+Arguments computes {s eff _ a} _ _ _ _.
 
 (* Given an interpreter that can run any effect down to its denotation in
    Gallina, we can interpret any action. *)
