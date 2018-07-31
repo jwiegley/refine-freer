@@ -55,7 +55,7 @@ Inductive relate : s -> Eff effs a -> s -> a -> Prop :=
         relate st (Impure u k) st'' v.
 
 Definition refine (st : s) (old new : Eff effs a) : Prop :=
-  forall (st' : s) v, relate st old st' v -> relate st new st' v.
+  forall (st' : s) v, relate st new st' v -> relate st old st' v.
 
 Require Import
   Hask.Control.Monad
@@ -121,22 +121,20 @@ Proof.
   apply inj_pair2 in H1; subst.
   inversion H6; subst; clear H6.
   inversion H7; subst; clear H7.
-  apply inj_pair2 in H0; subst.
-  apply inj_pair2 in H3; subst.
-  inversion H5; subst; clear H5.
-  inversion H6; subst; clear H6.
-  apply inj_pair2 in H0; subst.
-  apply inj_pair2 in H3; subst.
-  inversion H5; subst; clear H5.
-  inversion H7; subst; clear H7.
+  econstructor.
+    simpl.
+    unfold eq_rect_r, eq_rect, eq_sym; simpl.
+    reflexivity.
+  econstructor.
+    simpl.
+    unfold eq_rect_r, eq_rect, eq_sym; simpl.
+    reflexivity.
   econstructor.
     simpl.
     unfold eq_rect_r, eq_rect, eq_sym; simpl.
     split.
-      instantiate (1 := i + 10).
+      instantiate (1 := 10).
       omega.
     reflexivity.
-  replace (S (S (S (S (S (S (S (S (S (S i))))))))))
-     with (i + 10) by omega.
-  constructor.
-Qed.                            (* this was not a refinement! *)
+  simpl.
+Abort.
