@@ -109,9 +109,9 @@ Example refine_works :
     10
     (send (Put 10) ;;
      x <- send Get ;
-     y <- send (Pick (fun x => x <= 10));
+     y <- send (Pick (fun x => 0 <= x <= 10));
      pure (x + y))
-    (y <- send (Pick (fun x => x <= 30)); (* wrong! *)
+    (y <- send (Pick (fun x => 10 <= x <= 20));
      pure y).
 Proof.
   simpl.
@@ -133,8 +133,9 @@ Proof.
     simpl.
     unfold eq_rect_r, eq_rect, eq_sym; simpl.
     split.
-      instantiate (1 := 10).
+      instantiate (1 := v - 10).
       omega.
     reflexivity.
-  simpl.
-Abort.
+  replace (10 + (v - 10)) with v by omega.
+  constructor.
+Qed.
