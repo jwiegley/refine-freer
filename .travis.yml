@@ -17,11 +17,6 @@ env:
   - COQVERSION=coq_8_7
   - COQVERSION=coq_8_8
 
-install:
-- nix-shell --argstr compiler coq_8_6 --run true
-- nix-shell --argstr compiler coq_8_7 --run true
-- nix-shell --argstr compiler coq_8_8 --run true
-
 matrix:
   allow_failures:
   - env: COQVERSION=coq_8_8
