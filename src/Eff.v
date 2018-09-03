@@ -12,6 +12,9 @@ Import ListNotations.
 Import EqNotations.
 
 Generalizable All Variables.
+Set Primitive Projections.
+Set Universe Polymorphism.
+Unset Transparent Obligations.
 
 Definition sendF `(t : f a) : Freer f a := Impure t Pure.
 

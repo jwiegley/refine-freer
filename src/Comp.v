@@ -5,6 +5,9 @@ Require Import
   Hask.Control.Monad.
 
 Generalizable All Variables.
+Set Primitive Projections.
+Set Universe Polymorphism.
+Unset Transparent Obligations.
 
 Definition Comp (A : Type) := A -> Prop.
 

@@ -7,6 +7,9 @@ Require Import
 Import ListNotations.
 
 Generalizable All Variables.
+Set Primitive Projections.
+Set Universe Polymorphism.
+Unset Transparent Obligations.
 
 Inductive UnionF (a : Type) : list (Type -> Type) -> Type :=
   | UThis : forall t r, t a -> UnionF a (t :: r)
