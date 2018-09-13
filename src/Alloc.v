@@ -12,13 +12,8 @@ Open Scope nat_scope.
 Definition emptyS   := "empty".
 Definition allocS   := "alloc".
 Definition freeS    := "free".
-Definition reallocS := "realloc".
 Definition peekS    := "peek".
 Definition pokeS    := "poke".
-Definition memcpyS  := "memcpy".
-Definition memsetS  := "memset".
-Definition readS    := "read".
-Definition writeS   := "write".
 
 Definition Pos := nat.
 Definition Len := nat.
