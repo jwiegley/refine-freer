@@ -7,7 +7,7 @@ and metholodogy, with the Fiat library and its application in Coq.
 
 In Fiat, we begin by defining an ADT over an existential representation type,
 along with a set of methods that refer to this type. Each method is written in
-the form `input -> rep -> output * rep`, making every function a "transformer
+the form =input -> rep -> output * rep=, making every function a "transformer
 of rep-typed values" unless it chooses to pass it through.
 
 Note that after having written this "top level specification", we can
@@ -15,15 +15,15 @@ establish theorem about the semantics of the spec as a whole, such as the fact
 that freeing immediately after allocating leaves the heap unchanged.
 
 Refinement is the process of choosing a more concrete rep type, and an
-abstraction relation between the old and new types of the form `oldRep ->
-newRep -> Prop`. One is then presented with the obligation of proving that the
+abstraction relation between the old and new types of the form =oldRep ->
+newRep -> Prop=. One is then presented with the obligation of proving that the
 semantics of every method is maintained over this relation, while further
 restricting that none of the methods' other types may change: only the
 internal representation type.
 
 This continues stepwise until one reaches a final, computable refinement. Note
 that all steps until the final are done in a relational setting, using a
-`Comp` monad to ease the writing of such code in Coq.
+=Comp= monad to ease the writing of such code in Coq.
 
 * Denotational Design
 
