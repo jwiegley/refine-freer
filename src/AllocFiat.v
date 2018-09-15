@@ -196,33 +196,28 @@ Program Definition allocR (len : Len) (heap : HeapR a) :
   end.
 
 Theorem allocR_valid :
-  forall (heapR : HeapR a) heapR' x len (valid : Valid_HeapR heapR),
-    allocR len heapR = (heapR', x) -> Valid_HeapR heapR'.
+  forall len (heapR : HeapR a),
+    Valid_HeapR heapR -> Valid_HeapR (fst (allocR len heapR)).
 Proof.
-  unfold allocR; simpl; intros.
-  destruct (0 <? len).
-    destruct (next heapR + len <=? heapEnd heapR) eqn:?. {
-      inversion_clear H0.
-      constructor; intros; simpl in *.
-      - destruct H0.
-        inversion_clear H0.
-          omega.
-        apply next_avail in H0; auto.
-        omega.
-      - apply Nat.leb_le in Heqb.
-        omega.
-      - apply values_allocated in H0; auto.
-        destruct H0, H0, H0.
-        exists x0, x1.
-        intros.
-        destruct H.
-        split; [|omega].
-        right; auto.
-    }
-    inversion H0; subst; clear H0.
-    assumption.
-  inversion H0; subst; clear H0.
-  assumption.
+  intros ?? valid.
+  unfold allocR.
+  destruct (0 <? len); auto.
+  destruct (next heapR + len <=? heapEnd heapR) eqn:?; auto.
+  constructor; intros; simpl in *.
+  - destruct H0.
+    inversion_clear H0.
+      omega.
+    apply next_avail in H0; auto.
+    omega.
+  - apply Nat.leb_le in Heqb.
+    omega.
+  - apply values_allocated in H0; auto.
+    destruct H0, H0, H0.
+    exists x, x0.
+    intros.
+    destruct H.
+    split; [|omega].
+    right; auto.
 Qed.
 
 Program Definition peekR (pos : Pos) `(!Valid_HeapR heapR) :
@@ -247,7 +242,7 @@ Definition denote `{Monoid a} (h : HeapR a) : Rep RealHeap :=
 
 Theorem refine_If_Then_Else' :
   forall (A : Type) (c : bool) (x y r : Comp A),
-  (c = true -> refine x r) ->
+  (c = true  -> refine x r) ->
   (c = false -> refine y r) ->
   refine (If c Then x Else y) r.
 Proof.
@@ -361,10 +356,10 @@ Proof.
     simplify with monad laws; simpl.
     refine pick val (fst (allocR d r_n)).
       simplify with monad laws; simpl.
+      rewrite <- surjective_pairing.
       finish honing.
-    destruct (allocR d r_n) eqn:?.
-    pose proof (allocR_valid _ H1 Heqp).
-    auto.
+    split; auto.
+    now apply allocR_valid.
   }
 
   {
