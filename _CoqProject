@@ -1,10 +1,13 @@
 -R src Top
-src/Freer.v
-src/Union.v
-src/Member.v
-src/Eff.v
-src/Comp.v
+src/Algebra.v
+src/AllocDenote.v
+src/AllocFiat.v
 src/Choice.v
+src/Comp.v
+src/Eff.v
+src/Freer.v
+src/Member.v
 src/RWS.v
 src/Refine.v
 src/Refinement.v
+src/Union.v
