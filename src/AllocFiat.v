@@ -172,7 +172,9 @@ Record HeapR (a : Type) : Type := {
 Record Valid_HeapR `(heap : HeapR a) := {
   next_avail : forall pos len,
     List.In (pos, len) (allocs heap) -> pos + len <= next heap;
+
   next_within : next heap <= heapEnd heap;
+
   values_allocated : forall pos val,
     List.In (pos, val) (values heap) ->
       exists pos' len',
@@ -251,7 +253,7 @@ Proof.
 Qed.
 
 Theorem denote_alloc heapR len (valid : Valid_HeapR heapR) :
-  refine (callMeth RealHeap allocS (denote heapR) len)
+  refine (alloc (denote heapR) len)
          (match allocR len heapR with
           | (heapR', posR) => ret (denote heapR', posR)
           end).

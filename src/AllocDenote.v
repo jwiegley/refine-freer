@@ -9,10 +9,12 @@ Open Scope bool_scope.
 Definition Position := nat.
 Definition Length := nat.
 
+(** Model *)
 (** A heap is defined as identifying, at every position, whether that
     position falls within an allocated block, and the value there. *)
 Definition Heap (a : Type) := Position -> option (Position * Length * a).
 
+(** Algebra *)
 Definition alloc (len : Length) `{Monoid a} (heap : Heap a) :
   Heap a -> Position -> Prop := fun res pos =>
     IF 0 < len
