@@ -1,7 +1,7 @@
-{ packages ? "coqPackages_8_7"
+{ packages ? "coqPackages_8_8"
 
-, rev      ? "d1ae60cbad7a49874310de91cd17708b042400c8"
-, sha256   ? "0a1w4702jlycg2ab87m7n8frjjngf0cis40lyxm3vdwn7p4fxikz"
+, rev      ? "89b618771ad4b0cfdb874dee3d51eb267c4257dd"
+, sha256   ? "0jlyggy7pvqj2a6iyn44r7pscz9ixjb6fn6s4ssvahfywsncza6y"
 
 , pkgs     ? import (builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
@@ -24,18 +24,32 @@ with pkgs.${packages}; pkgs.stdenv.mkDerivation rec {
 
   buildInputs = [
     coq coq.ocaml coq.camlp5 coq.findlib
-    equations fiat_HEAD coq-haskell
+    equations coq-haskell
     (category-theory.overrideAttrs (attrs: rec {
        name = "coq${coq.coq-version}-category-theory-${version}";
-       version = "20180709";
+       version = "20181004";
        src = pkgs.fetchFromGitHub {
          owner = "jwiegley";
          repo = "category-theory";
-         rev = "3b9ba7b26a64d49a55e8b6ccea570a7f32c11ead";
-         sha256 = "0f2nr8dgn1ab7hr7jrdmr1zla9g9h8216q4yf4wnff9qkln8sbbs";
-         # date = 2018-03-26T17:10:21-07:00;
+         rev = "d5cf6c25de1c28bd71130965e3bb05a17a71301e";
+         sha256 = "0f5sihgkgiiv974hls9dwg37782y6w10ly2ygq0mq962s84i4kg1";
+         # date = 2018-10-04T15:39:49-07:00;
        };
        propagatedBuildInputs = [ coq ssreflect equations ];
+     }))
+    (fiat_HEAD.overrideAttrs (attrs: rec {
+       name = "coq${coq.coq-version}-fiat-core-${version}";
+       version = "20180514";
+       src = pkgs.fetchFromGitHub {
+         owner = "jwiegley";
+         repo = "fiat-core";
+         rev = "5d2d1fdfba7c3ed5a3120dad2415b0bb958b6d02";
+         sha256 = "190v5sz8fmdhbndknq9mkwpj3jf570gzdibww7f76g81a34v3qli";
+         fetchSubmodules = true;
+         # date = 2018-05-14T10:05:32-07:00;
+       };
+       buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib
+                       pkgs.git pkgs.python27 ];
      }))
   ];
   enableParallelBuilding = true;
