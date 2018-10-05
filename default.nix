@@ -21,9 +21,9 @@ let
     src = pkgs.fetchFromGitHub {
       owner = "jwiegley";
       repo = "coq-haskell";
-      rev = "acfad5c571eb32fcea4379fdf63e207182a6db8e";
-      sha256 = "0ingablkb16k2vfybx7cp1cl9gwcjk98xgyns6zdx27vajdqa9yk";
-      # date = 2018-05-17T22:14:20-07:00;
+      rev = "83a5db4b5741745ec9d522543d3616c308dfb542";
+      sha256 = "0310sbf6i8zfvrw5mqaifnh4rdl0j64gj3j20ak533xpq1fpbd4v";
+      # date = 2018-10-04T18:17:03-07:00;
     };
 
     buildInputs = [ coq.ocaml coq.camlp5 coq.findlib coq ssreflect ];
@@ -51,9 +51,9 @@ let
     src = pkgs.fetchFromGitHub {
       owner = "jwiegley";
       repo = "category-theory";
-      rev = "d5cf6c25de1c28bd71130965e3bb05a17a71301e";
-      sha256 = "0f5sihgkgiiv974hls9dwg37782y6w10ly2ygq0mq962s84i4kg1";
-      # date = 2018-10-04T15:39:49-07:00;
+      rev = "e204fee5b8662e414ecca13ca543fae3b19bd72a";
+      sha256 = "15hi0vmvm42qzsh5zzw78q2l5c8bf4nis2mjbannm0m96dpmszk0";
+      # date = 2018-10-05T10:50:15-07:00;
     };
 
     buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib equations ];
