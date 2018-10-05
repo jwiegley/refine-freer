@@ -11,7 +11,104 @@
   }
 }:
 
-with pkgs.${packages}; pkgs.stdenv.mkDerivation rec {
+with pkgs.${packages};
+
+let
+  coq-haskell = pkgs.stdenv.mkDerivation rec {
+    name = "coq${coq.coq-version}-haskell-${version}";
+    version = "1.0";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "jwiegley";
+      repo = "coq-haskell";
+      rev = "acfad5c571eb32fcea4379fdf63e207182a6db8e";
+      sha256 = "0ingablkb16k2vfybx7cp1cl9gwcjk98xgyns6zdx27vajdqa9yk";
+      # date = 2018-05-17T22:14:20-07:00;
+    };
+
+    buildInputs = [ coq.ocaml coq.camlp5 coq.findlib coq ssreflect ];
+
+    preBuild = "coq_makefile -f _CoqProject -o Makefile";
+
+    installFlags = "COQLIB=$(out)/lib/coq/${coq.coq-version}/";
+
+    meta = with pkgs.stdenv.lib; {
+      homepage = https://github.com/jwiegley/coq-haskell;
+      description = "A library for Haskell users writing Coq programs";
+      maintainers = with maintainers; [ jwiegley ];
+      platforms = coq.meta.platforms;
+    };
+
+    passthru = {
+      compatibleCoqVersions = v: builtins.elem v [ "8.5" "8.6" "8.7" "8.8" ];
+    };
+  };
+
+  category-theory = pkgs.stdenv.mkDerivation rec {
+    name = "category-theory";
+    version = "1.0";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "jwiegley";
+      repo = "category-theory";
+      rev = "d5cf6c25de1c28bd71130965e3bb05a17a71301e";
+      sha256 = "0f5sihgkgiiv974hls9dwg37782y6w10ly2ygq0mq962s84i4kg1";
+      # date = 2018-10-04T15:39:49-07:00;
+    };
+
+    buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib equations ];
+    enableParallelBuilding = true;
+
+    buildPhase = "make JOBS=$NIX_BUILD_CORES";
+    preBuild = "coq_makefile -f _CoqProject -o Makefile";
+    installFlags = "COQLIB=$(out)/lib/coq/${coq.coq-version}/";
+
+    passthru = {
+      compatibleCoqVersions = v: builtins.elem v [ "8.6" "8.7" "8.8" ];
+   };
+  };
+
+  fiat-core = pkgs.stdenv.mkDerivation rec {
+    name = "coq-fiat-core-${coq.coq-version}-unstable-${version}";
+    version = "2018-05-14";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "jwiegley";
+      repo = "fiat-core";
+      rev = "5d2d1fdfba7c3ed5a3120dad2415b0bb958b6d02";
+      sha256 = "190v5sz8fmdhbndknq9mkwpj3jf570gzdibww7f76g81a34v3qli";
+      fetchSubmodules = true;
+      # date = 2018-05-14T10:05:32-07:00;
+    };
+
+    buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib
+                    pkgs.git pkgs.python27 ];
+    propagatedBuildInputs = [ coq ];
+
+    doCheck = false;
+
+    enableParallelBuilding = true;
+    buildPhase = "make -j$NIX_BUILD_CORES";
+
+    installPhase = ''
+      COQLIB=$out/lib/coq/${coq.coq-version}/
+      mkdir -p $COQLIB/user-contrib/Fiat
+      cp -pR src/* $COQLIB/user-contrib/Fiat
+    '';
+
+    meta = with pkgs.stdenv.lib; {
+      homepage = http://plv.csail.mit.edu/fiat/;
+      description = "A library for the Coq proof assistant for synthesizing efficient correct-by-construction programs from declarative specifications";
+      maintainers = with maintainers; [ jwiegley ];
+      platforms = coq.meta.platforms;
+    };
+
+    passthru = {
+      compatibleCoqVersions = v: builtins.elem v [ "8.5" "8.6" "8.7" "8.8" ];
+    };
+  };
+
+in pkgs.stdenv.mkDerivation rec {
   name = "refine-freer";
   version = "1.0";
 
@@ -24,33 +121,7 @@ with pkgs.${packages}; pkgs.stdenv.mkDerivation rec {
 
   buildInputs = [
     coq coq.ocaml coq.camlp5 coq.findlib
-    equations coq-haskell
-    (category-theory.overrideAttrs (attrs: rec {
-       name = "coq${coq.coq-version}-category-theory-${version}";
-       version = "20181004";
-       src = pkgs.fetchFromGitHub {
-         owner = "jwiegley";
-         repo = "category-theory";
-         rev = "d5cf6c25de1c28bd71130965e3bb05a17a71301e";
-         sha256 = "0f5sihgkgiiv974hls9dwg37782y6w10ly2ygq0mq962s84i4kg1";
-         # date = 2018-10-04T15:39:49-07:00;
-       };
-       propagatedBuildInputs = [ coq ssreflect equations ];
-     }))
-    (fiat_HEAD.overrideAttrs (attrs: rec {
-       name = "coq${coq.coq-version}-fiat-core-${version}";
-       version = "20180514";
-       src = pkgs.fetchFromGitHub {
-         owner = "jwiegley";
-         repo = "fiat-core";
-         rev = "5d2d1fdfba7c3ed5a3120dad2415b0bb958b6d02";
-         sha256 = "190v5sz8fmdhbndknq9mkwpj3jf570gzdibww7f76g81a34v3qli";
-         fetchSubmodules = true;
-         # date = 2018-05-14T10:05:32-07:00;
-       };
-       buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib
-                       pkgs.git pkgs.python27 ];
-     }))
+    equations coq-haskell category-theory fiat-core
   ];
   enableParallelBuilding = true;
 
