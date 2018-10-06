@@ -9,7 +9,6 @@ Import ListNotations.
 Generalizable All Variables.
 Set Primitive Projections.
 Set Universe Polymorphism.
-Unset Transparent Obligations.
 
 Inductive UnionF (a : Type) : list (Type -> Type) -> Type :=
   | UThis : forall t r, t a -> UnionF a (t :: r)
@@ -34,6 +33,7 @@ Program Definition decomp `(u : Union (t :: r) v) : t v + Union r v :=
   | UThis x => fun _ => inl (_ x)
   | UThat x => fun _ => inr x
   end eq_refl.
+Unset Transparent Obligations.
 
 Definition decomp_rev `(u : Union (r ++ [t]) v) : Union r v + t v.
 Proof.
