@@ -25,7 +25,8 @@ In order to run Proof General with the correct nix configuration we still need a
 
 6. Add the following configuration to your .emacs file
 
-```(use-package direnv
+```emacs
+(use-package direnv
   :demand t
   :config
   (direnv-mode)
@@ -35,7 +36,8 @@ In order to run Proof General with the correct nix configuration we still need a
              (direnv-update-environment default-directory)
              (executable-find cmd))))
   :hook
-  (coq-mode . direnv-update-environment))```
+  (coq-mode . direnv-update-environment))
+```
 
 7. Run nix-shell
 
