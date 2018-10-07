@@ -1,10 +1,7 @@
 /Makefile.coq
 /Makefile.coq.conf
 /.coqdeps.d
-.direnv
-.envrc
 
-*.conf
 .*.aux
 *.a
 *.cma
