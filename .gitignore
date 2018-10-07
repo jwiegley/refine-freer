@@ -1,6 +1,7 @@
 /Makefile.coq
 /Makefile.coq.conf
 /.coqdeps.d
+.direnv
 
 .*.aux
 *.a
