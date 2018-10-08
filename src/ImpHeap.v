@@ -7,6 +7,8 @@ Require Import Coq.Strings.Ascii.
 Require Import Coq.Strings.String.
 Import ListNotations.
 
+Require Import Coq.Program.Tactics.
+
 Require Export
   Eff
   Comp
@@ -116,57 +118,121 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
                           pure tt
   end.
 
+
+Variant RunTimeError : Type -> Type :=
+| StackOverflow : RunTimeError Empty_set.
+
 Fixpoint string_to_asciiList (s: string): list ascii :=
   match s with
   | EmptyString => []
   | String x xs => x :: string_to_asciiList xs
   end.
 
+Definition move_heap_helper (move: nat) `(h: HeapCanon v): HeapCanon v :=
+  match h with
+  | Read addr => Read (addr+move)
+  | Write addr val => Write (addr+move) val
+  end.
+
+Fixpoint HeapCanon_shiftBy (counter: nat) `(e: Eff (HeapCanon :: effs) t): Eff (HeapCanon :: effs) t :=
+  match e with
+  | Pure e => pure e
+  | Impure u k =>
+    let cont := (fun x => HeapCanon_shiftBy counter (k x)) in
+    match decomp u with
+                 | inl l => Impure (inj (move_heap_helper counter l)) cont
+                 | inr r => Impure u cont
+                 end
+  end.
+
+Definition HeapCanon_shift `(e: Eff (HeapCanon :: effs) t) := HeapCanon_shiftBy 10 e.
+
 Definition hash_string (s: string): nat :=
   fold_right (fun c n => n * nat_of_ascii c) 1 (string_to_asciiList s).
 
 Eval compute in (hash_string "01").
 
-Definition handler: Locals ~> Eff [HeapCanon] :=
+Definition locals_handler: Locals ~> Eff [HeapCanon] :=
   fun `(H: Locals a) =>
     match H with
-    | Read addr => c <- send (Read (hash_string addr)); pure c
+    | Read addr => send (Read (hash_string addr)) >>= pure
     | Write addr val => send (Write (hash_string addr) val);; pure tt
     end.
 
-Definition memory_fusion :=
-  @interpret _ _ handler unit.
+Definition get_local `(h: Locals t): string :=
+  match h with
+  | Read addr => addr
+  | Write addr _ => addr
+  end.
 
-Definition x: com := ("X" ::= ANum 3;;; "Y" ::= 4;;; CStore 0 (4+1) ;;; CStore 1 (4+2);;;
-                                             "Z" ::= ALoad 0;;; SKIP).
+Program Fixpoint get_locals `(e: Eff (Locals :: effs) t): list string :=
+  match e with
+  | Pure x => []
+  | Impure u k => (match u in UnionF _ xs
+                       return (Locals::effs)%list = xs -> list string with
+                  | UThis f => fun _ => (get_local (_ f)) ::
+                        get_locals (Impure (inj (_ f)) k )
+                 | UThat u' => fun _ => []
+                 end) eq_refl
+  end.
+
+
+Fixpoint memory_fusion `(e: Eff (Locals :: HeapCanon :: effs)
+
+Definition locals_bind: Locals ~> Eff [HeapCanon] :=
+  fun `(H: Locals a) =>
+    match H with
+    | Read addr => send (Read (hash_string addr)) >>= pure
+    | Write addr val => send (Write (hash_string addr) val);; pure tt
+    end.
+
+
+
+Definition memory_fusion :=
+  @interpret _ _ locals_handler unit.
+
+Definition effect_swap `(e: Eff ([eff1; eff2]++effs) v) : Eff ([eff2; eff1]++effs) v.
+Proof.
+  unfold Eff in *.
+  induction e.
+  - constructor; auto.
+  - inversion f; subst.
+    -- constructor 2 with x; auto.
+       constructor 2; eauto.
+       constructor 1; eauto.
+    -- inversion X0; subst.
+       --- constructor 2 with x; auto.
+           constructor; auto.
+       --- constructor 2 with x; auto.
+           repeat constructor 2.
+           auto.
+Defined.
 
 Notation "⟦ c ⟧" := (denote_imp c) (at level 40).
 
+Definition x: com := ("X" ::= ANum 3;;; "Y" ::= 4;;; CStore 0 (4+1) ;;; CStore 1 (4+2);;;
+                                             "Z" ::= ALoad 0;;; SKIP).
 Definition plusDet :=
   ⟦ x ⟧.
 
+Notation "⇄ x" := (effect_swap x) (at level 50).
+
 Eval compute in (plusDet).
+
+
+Eval compute in (HeapCanon_shift (⇄ plusDet)).
+ (* = Impure (UThat (UThis (Write "X"%string 3)))
+         (fun _ : unit =>
+          Impure (UThat (UThis (Write "Y"%string 4)))
+            (fun _ : unit =>
+             Impure (UThis (Write 10 5))
+               (fun _ : unit =>
+                Impure (UThis (Write 11 6))
+                  (fun _ : unit =>
+                   Impure (UThis (Read 10))
+                     (fun x3 : nat =>
+                      Impure (UThat (UThis (Write "Z"%string x3))) (fun _ : unit => Pure tt))))))
+  *)
+
 Eval compute in (memory_fusion plusDet).
 Eval compute in nat_of_ascii "0".
-
-
-(*Impure (UThis (Write 0 3))
-         (fun _ : unit => Impure (UThis (Write 1 6)) (fun _ : unit => Pure tt))
-     : Eff [HeapCanon; Locals] unit
-*)
-
-
-
-(* The basic idea here now is to fold these two heaps into a single one via some mapping
- * i.e. A function of the following type:
- * `forall t, Eff (Heap nat nat :+: Locals) t ->
-              map nat nat ->
-              Eff StackOverflow (map nat nat * t)`
- * Write Effect handler for heap -> work as a finite map.
- * `forall t, Heap k v t -> (map k v) -> (map k v * t)` (edited)
- * forall t, Heap k v t -> State (map k v) t
-
-
- ascii_to_nat -> multiply them by 256
-
- *)
