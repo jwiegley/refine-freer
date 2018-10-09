@@ -77,6 +77,46 @@ Inductive Heap {addr value: Type}: Type -> Type :=
 
 Arguments Heap _ _ _ : clear implicits.
 
+Fixpoint runHeap' `(v: val) `(h: Heap addr val t): t.
+  destruct h.
+  - exact v.
+  - exact tt.
+Defined.
+
+Program Fixpoint runHeap `(v: val) `(f: Eff [Heap addr val] t): t :=
+  match f with
+  | Pure x => x
+  | Impure u k => match extract u with
+                 | Read a1 => runHeap v (k _)
+                 | Write a1 v1 => runHeap v1 (k _)
+                 end
+  end.
+Next Obligation.
+  symmetry in Heq_wildcard'.
+  subst.
+  exact v.
+Defined.
+Next Obligation.
+  rewrite <- Heq_wildcard'.
+  exact tt.
+Defined.
+
+Program Fixpoint runHeapC `(v: val) `(f: Eff (Heap addr val:: effs) t):
+  Eff effs t :=
+  match f with
+  | Pure x => Pure x
+  | Impure u k => match decomp u with
+                     | inr r => Impure r (fun y => runHeapC v (k y))
+                     | inl l => match l with
+                               | Read a1 => runHeapC v (k _)
+                               | Write a1 v1 => runHeapC v1 (k _)
+                               end
+                 end
+  end.
+Next Obligation.
+  exact tt.
+Defined.
+
 Definition Locals: Type -> Type := Heap string nat.
 Definition HeapCanon: Type -> Type := Heap nat nat.
 
@@ -122,12 +162,6 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
 Variant RunTimeError : Type -> Type :=
 | StackOverflow : RunTimeError Empty_set.
 
-Fixpoint string_to_asciiList (s: string): list ascii :=
-  match s with
-  | EmptyString => []
-  | String x xs => x :: string_to_asciiList xs
-  end.
-
 Definition move_heap_helper (move: nat) `(h: HeapCanon v): HeapCanon v :=
   match h with
   | Read addr => Read (addr+move)
@@ -145,32 +179,30 @@ Fixpoint HeapCanon_shiftBy (counter: nat) `(e: Eff (HeapCanon :: effs) t): Eff (
                  end
   end.
 
-Definition HeapCanon_shift `(e: Eff (HeapCanon :: effs) t) := HeapCanon_shiftBy 10 e.
-
-Definition hash_string (s: string): nat :=
-  fold_right (fun c n => n * nat_of_ascii c) 1 (string_to_asciiList s).
-
-Eval compute in (hash_string "01").
-
 Definition get_local `(h: Locals t): string :=
   match h with
   | Read addr => addr
   | Write addr _ => addr
   end.
 
-Lemma app_locs : forall v, v.
-Admitted.
-
-Fixpoint get_locals' {t effs} (e: Eff (Locals :: effs) t): (forall v, v) -> list string :=
+(* In order to add arbitrary effects I need an interpreter for each effect
+ * A TypeClass sounds like a good idea to achieve that
+ *)
+Fixpoint get_locals {t} (e: Eff [Locals; HeapCanon] t):  list string :=
   match e with
-  | Pure x => fun _ => []
+  | Pure v => []
   | Impure u k => match decomp u with
-                 | inl f => fun y => get_local f :: (get_locals' (k (y _))) y
-                 | inr u' => fun y => (get_locals' (k (y _))) y
+                 | inl l => get_local l :: (get_locals (k (runHeap' 0 l)))
+                 | inr r => get_locals (k (runHeap' 0 (extract r)))
                  end
   end.
 
-Definition get_locals `(e: Eff (Locals :: effs) t) := get_locals' e app_locs.
+(* TODO: Change this to change the lenght of all locals 
+ * HeapCanon_shiftBy (length (get_locals e)) e.
+ * We need a minor tweak in the types for this
+ *) 
+Definition HeapCanon_shift `(e: Eff (HeapCanon :: effs) t) :=
+  HeapCanon_shiftBy 10 e.
 
 Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
          (x: t) (l: list t): nat :=
@@ -183,24 +215,6 @@ Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
                end
   end.
 
-Program Fixpoint locals_handler `(ta: taddr) `(tv: tval) `(e: Eff [Heap taddr tval] t): t :=
-  match e with
-  | Pure x => x
-  | Impure u q => (match extract u with
-                 | Read addr => locals_handler ta tv (q _)
-                 | Write addr val => locals_handler ta tv (q _)
-                 end)
-  end.
-Next Obligation.
-  refine tt.
-Qed.
-
-    match H with
-    | Read addr => 
-    | Write addr val => let n := first_occ string_dec addr l in
-                       send (Write n val);; pure tt
-    end.
-
 Definition locals_handler {effs} (l: list string) : Locals ~> Eff (HeapCanon::effs) :=
   fun `(H: Locals a) =>
     match H with
@@ -210,8 +224,8 @@ Definition locals_handler {effs} (l: list string) : Locals ~> Eff (HeapCanon::ef
                        send (Write n val);; pure tt
     end.
 
-Definition memory_fusion `(e: Eff (Locals::HeapCanon :: effs) unit) :=
-  (@interpret _ (HeapCanon::effs) (@locals_handler _ (get_locals e)) unit) e.
+Definition memory_fusion `(e: Eff [Locals; HeapCanon] unit) :=
+  (@interpret _ [HeapCanon] (@locals_handler _ (get_locals e)) unit) e.
 
 Definition effect_swap `(e: Eff ([eff1; eff2]++effs) v) : Eff ([eff2; eff1]++effs) v.
 Proof.
@@ -259,4 +273,3 @@ Eval compute in (HeapCanon_shift (⇄ plusDet)).
   *)
 
 Eval compute in (memory_fusion (⇄(HeapCanon_shift (⇄ plusDet)))).
-Eval compute in nat_of_ascii "0".
