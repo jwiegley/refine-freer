@@ -185,3 +185,24 @@ Program Fixpoint raise {e} `(f : Eff effs a) : Eff (e :: effs) a :=
   | Pure x => Pure x
   | Impure u k => Impure (weaken u) (fun x => raise (k x))
   end.
+
+
+Definition effect_swap `(e: Eff ([eff1; eff2]++effs) v) : Eff ([eff2; eff1]++effs) v.
+Proof.
+  unfold Eff in *.
+  induction e.
+  - constructor; auto.
+  - inversion f; subst.
+    -- constructor 2 with x; auto.
+       constructor 2; eauto.
+       constructor 1; eauto.
+    -- inversion X0; subst.
+       --- constructor 2 with x; auto.
+           constructor; auto.
+       --- constructor 2 with x; auto.
+           repeat constructor 2.
+           auto.
+Defined.
+
+Notation "⇄ x" := (effect_swap x) (at level 50).
+

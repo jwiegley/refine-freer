@@ -1,25 +1,22 @@
-Require Import Coq.Bool.Bool.
-Require Import Coq.Arith.Arith.
-Require Import Coq.Arith.EqNat.
-Require Import Coq.omega.Omega.
-Require Import Coq.Lists.List.
-Require Import Coq.Strings.Ascii.
-Require Import Coq.Strings.String.
-Import ListNotations.
-
-Require Import Coq.Program.Tactics.
-
-Require Export
-  Eff
-  Comp
-  Choice.
-
+Require Import
+        Coq.Bool.Bool
+        Coq.Arith.Arith
+        Coq.Arith.EqNat
+        Coq.omega.Omega
+        Coq.Lists.List
+        Coq.Strings.Ascii
+        Coq.Strings.String
+        Coq.Program.Tactics.
 
 Require Import
   Hask.Control.Monad
-  Hask.Data.Maybe
-  RWS.
+  Hask.Data.Maybe.
 
+Require Export
+  Eff
+  Heap.
+
+Import ListNotations.
 Generalizable All Variables.
 
 Inductive aexp : Type :=
@@ -71,52 +68,6 @@ Notation "c1 ;;; c2" :=
 Notation "'IFB' c1 'THEN' c2 'ELSE' c3 'FI'" :=
   (CIf c1 c2 c3) (at level 80, right associativity) : com_scope.
 
-Inductive Heap {addr value: Type}: Type -> Type :=
-| Read : addr -> Heap value (* Takes an address and return a value *)
-| Write : addr -> value -> Heap unit. 
-
-Arguments Heap _ _ _ : clear implicits.
-
-Fixpoint runHeap' `(v: val) `(h: Heap addr val t): t.
-  destruct h.
-  - exact v.
-  - exact tt.
-Defined.
-
-Program Fixpoint runHeap `(v: val) `(f: Eff [Heap addr val] t): t :=
-  match f with
-  | Pure x => x
-  | Impure u k => match extract u with
-                 | Read a1 => runHeap v (k _)
-                 | Write a1 v1 => runHeap v1 (k _)
-                 end
-  end.
-Next Obligation.
-  symmetry in Heq_wildcard'.
-  subst.
-  exact v.
-Defined.
-Next Obligation.
-  rewrite <- Heq_wildcard'.
-  exact tt.
-Defined.
-
-Program Fixpoint runHeapC `(v: val) `(f: Eff (Heap addr val:: effs) t):
-  Eff effs t :=
-  match f with
-  | Pure x => Pure x
-  | Impure u k => match decomp u with
-                     | inr r => Impure r (fun y => runHeapC v (k y))
-                     | inl l => match l with
-                               | Read a1 => runHeapC v (k _)
-                               | Write a1 v1 => runHeapC v1 (k _)
-                               end
-                 end
-  end.
-Next Obligation.
-  exact tt.
-Defined.
-
 Definition Locals: Type -> Type := Heap string nat.
 Definition HeapCanon: Type -> Type := Heap nat nat.
 
@@ -157,24 +108,25 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
                           send (Write addr val);;
                           pure tt
   end.
-
+Notation "'⟦' c '⟧'" := (denote_imp c) (at level 40).
 
 Variant RunTimeError : Type -> Type :=
 | StackOverflow : RunTimeError Empty_set.
 
-Definition move_heap_helper (move: nat) `(h: HeapCanon v): HeapCanon v :=
+Definition move_heap (move: nat) `(h: HeapCanon v): HeapCanon v :=
   match h with
   | Read addr => Read (addr+move)
   | Write addr val => Write (addr+move) val
   end.
 
-Fixpoint HeapCanon_shiftBy (counter: nat) `(e: Eff (HeapCanon :: effs) t): Eff (HeapCanon :: effs) t :=
+Fixpoint shiftBy (move: nat) `(e: Eff (HeapCanon :: effs) t)
+  : Eff (HeapCanon :: effs) t :=
   match e with
   | Pure e => pure e
   | Impure u k =>
-    let cont := (fun x => HeapCanon_shiftBy counter (k x)) in
+    let cont := (fun x => shiftBy move (k x)) in
     match decomp u with
-                 | inl l => Impure (inj (move_heap_helper counter l)) cont
+                 | inl l => Impure (inj (move_heap move l)) cont
                  | inr r => Impure u cont
                  end
   end.
@@ -192,17 +144,13 @@ Fixpoint get_locals {t} (e: Eff [Locals; HeapCanon] t):  list string :=
   match e with
   | Pure v => []
   | Impure u k => match decomp u with
-                 | inl l => get_local l :: (get_locals (k (runHeap' 0 l)))
-                 | inr r => get_locals (k (runHeap' 0 (extract r)))
+                 | inl l => get_local l :: (get_locals (k (runHeap 0 l)))
+                 | inr r => get_locals (k (runHeap 0 (extract r)))
                  end
   end.
 
-(* TODO: Change this to change the lenght of all locals 
- * HeapCanon_shiftBy (length (get_locals e)) e.
- * We need a minor tweak in the types for this
- *) 
-Definition HeapCanon_shift `(e: Eff (HeapCanon :: effs) t) :=
-  HeapCanon_shiftBy 10 e.
+Definition alloc_locals `(e: Eff [Locals; HeapCanon] t) :=
+  ⇄ shiftBy (Datatypes.length (get_locals e)) (⇄ e).
 
 Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
          (x: t) (l: list t): nat :=
@@ -215,7 +163,7 @@ Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
                end
   end.
 
-Definition locals_handler {effs} (l: list string) : Locals ~> Eff (HeapCanon::effs) :=
+Definition locals_handler' {effs} (l: list string) : Locals ~> Eff (HeapCanon::effs) :=
   fun `(H: Locals a) =>
     match H with
     | Read addr => let n := first_occ string_dec addr l in
@@ -224,52 +172,16 @@ Definition locals_handler {effs} (l: list string) : Locals ~> Eff (HeapCanon::ef
                        send (Write n val);; pure tt
     end.
 
-Definition memory_fusion `(e: Eff [Locals; HeapCanon] unit) :=
-  (@interpret _ [HeapCanon] (@locals_handler _ (get_locals e)) unit) e.
+Definition locals_handler {effs} (e: Eff [Locals; HeapCanon] unit) :=
+  @locals_handler' effs (get_locals e).
 
-Definition effect_swap `(e: Eff ([eff1; eff2]++effs) v) : Eff ([eff2; eff1]++effs) v.
-Proof.
-  unfold Eff in *.
-  induction e.
-  - constructor; auto.
-  - inversion f; subst.
-    -- constructor 2 with x; auto.
-       constructor 2; eauto.
-       constructor 1; eauto.
-    -- inversion X0; subst.
-       --- constructor 2 with x; auto.
-           constructor; auto.
-       --- constructor 2 with x; auto.
-           repeat constructor 2.
-           auto.
-Defined.
-
-Notation "⟦ c ⟧" := (denote_imp c) (at level 40).
+Definition memory_fusion e :=
+  (interpret (locals_handler e) unit) (alloc_locals e).
 
 Definition x: com := ("X" ::= ANum 3;;; CStore 1 (4+2);;; "Z" ::= ALoad 0;;; SKIP).
-Definition plusDet :=
-  ⟦ x ⟧.
+Definition x_itree := ⟦ x ⟧.
 
-Notation "⇄ x" := (effect_swap x) (at level 50).
-
-Eval compute in (plusDet).
-
-
-Eval compute in ((get_locals plusDet)).
-
-
-Eval compute in (HeapCanon_shift (⇄ plusDet)).
- (* = Impure (UThat (UThis (Write "X"%string 3)))
-         (fun _ : unit =>
-          Impure (UThat (UThis (Write "Y"%string 4)))
-            (fun _ : unit =>
-             Impure (UThis (Write 10 5))
-               (fun _ : unit =>
-                Impure (UThis (Write 11 6))
-                  (fun _ : unit =>
-                   Impure (UThis (Read 10))
-                     (fun x3 : nat =>
-                      Impure (UThat (UThis (Write "Z"%string x3))) (fun _ : unit => Pure tt))))))
-  *)
-
-Eval compute in (memory_fusion (⇄(HeapCanon_shift (⇄ plusDet)))).
+Eval compute in (x_itree).
+Eval compute in (get_locals x_itree).
+Eval compute in (alloc_locals x_itree).
+Eval compute in (memory_fusion x_itree).
