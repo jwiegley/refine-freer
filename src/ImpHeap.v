@@ -14,6 +14,7 @@ Require Import
 
 Require Export
   Eff
+  Maps
   Heap.
 
 Import ListNotations.
@@ -108,6 +109,37 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
                           send (Write addr val);;
                           pure tt
   end.
+
+Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] unit)
+  : list (string * nat) * (list (nat * nat)) :=
+  match e with 
+  | Pure v => ([], [])
+  | Impure u k => match decomp u with
+                 | inl l => let '(locs, heap) := interpret_imptree (k (runHeap 0 l))
+                           in match l with
+                              | Read addr => (locs, heap)
+                              | Write a v => ((a, v)::locs, heap)
+                              end
+                 | inr r => let u' := extract r in
+                           let '(locs, heap) := interpret_imptree (k (runHeap 0 u')) in
+                           match u' with
+                           | Read addr => (locs, heap)
+                           | Write a v => (locs, (a,v)::heap)
+                           end
+                 end
+  end.
+
+Fixpoint interpret_imptree' (e: Eff [HeapCanon] unit): list (nat * nat) :=
+  match e with 
+  | Pure v => []
+  | Impure u k => let u' := extract u in
+                 let xs := interpret_imptree' (k (runHeap 0 u')) in
+                 match u' with
+                 | Read addr => xs
+                 | Write a v => (a,v)::xs
+                 end
+  end.
+
 Notation "'⟦' c '⟧'" := (denote_imp c) (at level 40).
 
 Variant RunTimeError : Type -> Type :=
@@ -153,13 +185,13 @@ Definition alloc_locals `(e: Eff [Locals; HeapCanon] t) :=
   ⇄ shiftBy (Datatypes.length (get_locals e)) (⇄ e).
 
 Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
-         (x: t) (l: list t): nat :=
+         (x: t) (l: list t):=
   match l with
   | [] => 0
   | x' :: xs => match t_dec x x' with
                | left _ => 0
                | right _ => let n := first_occ t_dec x xs in
-                             (S n)
+                           S n
                end
   end.
 
@@ -185,3 +217,21 @@ Eval compute in (x_itree).
 Eval compute in (get_locals x_itree).
 Eval compute in (alloc_locals x_itree).
 Eval compute in (memory_fusion x_itree).
+
+Fixpoint heapfy (c: nat) (l: list (string*nat)): list (nat*nat) :=
+  match l with
+  | [] => []
+  | (s, n)::xs => (c,n) :: heapfy (S c) xs
+  end.
+
+Theorem interp_correct (c:com):
+  forall locs heap,
+  let e := denote_imp c in
+  let xs' := interpret_imptree' (memory_fusion e) in
+  (locs, heap) = interpret_imptree e ->
+  exists map, map locs heap = xs'.
+Proof.
+  intros locs heap e xs' H.
+  exists (fun (l:list (string * nat)) (h:list (nat*nat)) =>
+       heapfy 0 l ++ map (fun x => (fst x + Datatypes.length l, snd x)) h).
+Admitted.
