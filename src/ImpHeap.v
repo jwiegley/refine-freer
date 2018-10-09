@@ -17,6 +17,7 @@ Require Export
 
 Require Import
   Hask.Control.Monad
+  Hask.Data.Maybe
   RWS.
 
 Generalizable All Variables.
@@ -70,9 +71,8 @@ Notation "c1 ;;; c2" :=
 Notation "'IFB' c1 'THEN' c2 'ELSE' c3 'FI'" :=
   (CIf c1 c2 c3) (at level 80, right associativity) : com_scope.
 
-
 Inductive Heap {addr value: Type}: Type -> Type :=
-| Read : addr -> Heap value (* Takes an addrs and return a value *)
+| Read : addr -> Heap value (* Takes an address and return a value *)
 | Write : addr -> value -> Heap unit. 
 
 Arguments Heap _ _ _ : clear implicits.
@@ -152,44 +152,66 @@ Definition hash_string (s: string): nat :=
 
 Eval compute in (hash_string "01").
 
-Definition locals_handler: Locals ~> Eff [HeapCanon] :=
-  fun `(H: Locals a) =>
-    match H with
-    | Read addr => send (Read (hash_string addr)) >>= pure
-    | Write addr val => send (Write (hash_string addr) val);; pure tt
-    end.
-
 Definition get_local `(h: Locals t): string :=
   match h with
   | Read addr => addr
   | Write addr _ => addr
   end.
 
-Program Fixpoint get_locals `(e: Eff (Locals :: effs) t): list string :=
+Lemma app_locs : forall v, v.
+Admitted.
+
+Fixpoint get_locals' {t effs} (e: Eff (Locals :: effs) t): (forall v, v) -> list string :=
   match e with
-  | Pure x => []
-  | Impure u k => (match u in UnionF _ xs
-                       return (Locals::effs)%list = xs -> list string with
-                  | UThis f => fun _ => (get_local (_ f)) ::
-                        get_locals (Impure (inj (_ f)) k )
-                 | UThat u' => fun _ => []
-                 end) eq_refl
+  | Pure x => fun _ => []
+  | Impure u k => match decomp u with
+                 | inl f => fun y => get_local f :: (get_locals' (k (y _))) y
+                 | inr u' => fun y => (get_locals' (k (y _))) y
+                 end
   end.
 
+Definition get_locals `(e: Eff (Locals :: effs) t) := get_locals' e app_locs.
 
-Fixpoint memory_fusion `(e: Eff (Locals :: HeapCanon :: effs)
+Fixpoint first_occ `(t_dec: forall (t1 t2: t), ({t1 = t2} + {t1 <> t2}))
+         (x: t) (l: list t): nat :=
+  match l with
+  | [] => 0
+  | x' :: xs => match t_dec x x' with
+               | left _ => 0
+               | right _ => let n := first_occ t_dec x xs in
+                             (S n)
+               end
+  end.
 
-Definition locals_bind: Locals ~> Eff [HeapCanon] :=
-  fun `(H: Locals a) =>
+Program Fixpoint locals_handler `(ta: taddr) `(tv: tval) `(e: Eff [Heap taddr tval] t): t :=
+  match e with
+  | Pure x => x
+  | Impure u q => (match extract u with
+                 | Read addr => locals_handler ta tv (q _)
+                 | Write addr val => locals_handler ta tv (q _)
+                 end)
+  end.
+Next Obligation.
+  refine tt.
+Qed.
+
     match H with
-    | Read addr => send (Read (hash_string addr)) >>= pure
-    | Write addr val => send (Write (hash_string addr) val);; pure tt
+    | Read addr => 
+    | Write addr val => let n := first_occ string_dec addr l in
+                       send (Write n val);; pure tt
     end.
 
+Definition locals_handler {effs} (l: list string) : Locals ~> Eff (HeapCanon::effs) :=
+  fun `(H: Locals a) =>
+    match H with
+    | Read addr => let n := first_occ string_dec addr l in
+                      send (Read n) >>= pure
+    | Write addr val => let n := first_occ string_dec addr l in
+                       send (Write n val);; pure tt
+    end.
 
-
-Definition memory_fusion :=
-  @interpret _ _ locals_handler unit.
+Definition memory_fusion `(e: Eff (Locals::HeapCanon :: effs) unit) :=
+  (@interpret _ (HeapCanon::effs) (@locals_handler _ (get_locals e)) unit) e.
 
 Definition effect_swap `(e: Eff ([eff1; eff2]++effs) v) : Eff ([eff2; eff1]++effs) v.
 Proof.
@@ -210,14 +232,16 @@ Defined.
 
 Notation "⟦ c ⟧" := (denote_imp c) (at level 40).
 
-Definition x: com := ("X" ::= ANum 3;;; "Y" ::= 4;;; CStore 0 (4+1) ;;; CStore 1 (4+2);;;
-                                             "Z" ::= ALoad 0;;; SKIP).
+Definition x: com := ("X" ::= ANum 3;;; CStore 1 (4+2);;; "Z" ::= ALoad 0;;; SKIP).
 Definition plusDet :=
   ⟦ x ⟧.
 
 Notation "⇄ x" := (effect_swap x) (at level 50).
 
 Eval compute in (plusDet).
+
+
+Eval compute in ((get_locals plusDet)).
 
 
 Eval compute in (HeapCanon_shift (⇄ plusDet)).
@@ -234,5 +258,5 @@ Eval compute in (HeapCanon_shift (⇄ plusDet)).
                       Impure (UThat (UThis (Write "Z"%string x3))) (fun _ : unit => Pure tt))))))
   *)
 
-Eval compute in (memory_fusion plusDet).
+Eval compute in (memory_fusion (⇄(HeapCanon_shift (⇄ plusDet)))).
 Eval compute in nat_of_ascii "0".
