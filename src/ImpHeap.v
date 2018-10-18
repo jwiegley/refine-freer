@@ -115,8 +115,8 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
 Polymorphic Cumulative Inductive RunTimeError@{i j} : Type@{i} -> Type@{j} :=
 | NullPointerException : RunTimeError Empty_set.
 
-Definition context := list (nat*nat).
-Definition state := partial_map nat.
+Definition context := list ((nat : Type)*(nat : Type)).
+Definition state := partial_map (nat : Type).
 
 Fixpoint find_key (k: nat) (l: context): option nat :=
   match l with
