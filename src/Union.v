@@ -27,6 +27,7 @@ Notation "f ~> g" := (forall x, f x -> g x) (at level 90).
 
 Import EqNotations.
 
+Set Transparent Obligations.
 Program Definition decomp `(u : Union (t :: r) v) : t v + Union r v :=
   match u in UnionF _ xs
         return (t :: r)%list = xs -> t v + Union r v with

@@ -142,9 +142,19 @@ Definition t_empty {A:Type} (v : A) : total_map A :=
     a map [m], a key [x], and a value [v] and returns a new map that
     takes [x] to [v] and takes every other key to whatever [m] does. *)
 
+Fixpoint eqb_string (x y: string): bool :=
+  match x, y with
+  | EmptyString, EmptyString => true
+  | EmptyString, _ => false
+  | _, EmptyString  => false
+  | String c cs, String d ds => if (Ascii.nat_of_ascii c) =? (Ascii.nat_of_ascii d)
+                               then eqb_string cs ds
+                               else false
+  end.
+
 Definition t_update {A:Type} (m : total_map A)
                     (x : string) (v : A) :=
-  fun x' => if beq_string x x' then v else m x'.
+  fun x' => if eqb_string x x' then v else m x'.
 
 (** This definition is a nice example of higher-order programming:
     [t_update] takes a _function_ [m] and yields a new function
