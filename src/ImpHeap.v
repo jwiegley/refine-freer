@@ -124,17 +124,16 @@ Fixpoint find_key (k: nat) (l: context): option nat :=
   | (x,v) :: xs => if (k =? x) then Some v else find_key k xs
   end.
 
-Definition unit': Type := unit.
-Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] unit')
-  : Eff [State context; State state; RunTimeError] unit' :=
+Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] (unit: Type))
+  : Eff [State context; State state; RunTimeError] (unit:Type) :=
   match e with 
   | Pure v => pure tt
   | Impure u k => match decomp u with
                  | inl l => match l with
                            | Read addr => st <- send Get;
                                            match st addr with
-                                           | None => pure tt
-                                           | Some v => interpret_imptree (k _)
+                                           | None => send NullPointerException;; pure tt
+                                           | Some v => interpret_imptree (k ltac:(subst; refine v))
                                            end
                            | Write a v => st <- send Get;
                                            send (Put (update st a v));;
@@ -145,8 +144,8 @@ Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] unit')
                            match u' with
                            | Read addr => l <- send Get;
                                         match find_key addr l with
-                                        | None => pure tt
-                                        | Some v => interpret_imptree (k _)
+                                        | None => send NullPointerException;; pure tt
+                                        | Some v => interpret_imptree (k ltac:(subst;refine v))
                                         end
                            | Write a v => l <- send Get;
                                           send (Put ((a, v)::l));;
@@ -156,13 +155,7 @@ Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] unit')
                  end
   end.
 
-Definition m: partial_map nat := (update empty "X" 2).
-Definition X: string:= "X".
-
-Eval compute in (m "X"%string).
-Eval compute in (m "Y"%string).
-
-Definition app_state (m1 m2: state):=
+Definition app_state (m1 m2: state): state:=
   fun x => match m1 x with
         | Some v => Some v
         | None => m2 x
@@ -174,18 +167,18 @@ Definition run_state `(s: State u t) (v: u): u :=
   | Put x => x
   end.
 
-Program Fixpoint run_state_context_help (acc: state*context)
-        (e: Eff [State context; State state; RunTimeError] unit')
-  : option (state * context) :=
+Program Fixpoint run_state_context_help (acc: context * state)
+        (e: Eff [State context; State state; RunTimeError] unit)
+  : option (context * state) :=
   match e with
   | Pure c => Some acc
   | Impure u k => match decomp u with
                  | inl l => let st := run_state l [] in
-                           let new_acc := (fst acc, (snd acc) ++ st) in
+                           let new_acc := ((fst acc) ++ st, snd acc) in
                            run_state_context_help new_acc (k _) 
                  | inr r => match decomp r with
                            | inl l' => let ctx := run_state l' empty in
-                                      let new_acc := (app_state (fst acc) ctx, snd acc) in
+                                      let new_acc := (fst acc, app_state (snd acc) ctx) in
                                       run_state_context_help new_acc (k _) 
                            | inr r' => None
                            end
@@ -202,16 +195,13 @@ Next Obligation.
   - refine tt.
 Defined.
 
-Definition run_state_context := run_state_context_help (empty, []).
+Definition run_state_context := run_state_context_help ([], empty).
 
 Definition interp_imp e
-  : Eff [State context; State state; RunTimeError] unit' :=
+  : Eff [State context; State state; RunTimeError] unit :=
   (send (Put empty);; send (Put []);; (interpret_imptree e)).
 
-Eval compute in (beq_nat_eq 1 1).
-Set Printing Universes. 
-
-Definition interp := fun x => run_state_context (interp_imp x).
+Definition interp := run_state_context \o interp_imp.
 
 Fixpoint interpret_imptree' (e: Eff [HeapCanon] unit):
   Eff [State context; RunTimeError] context :=
@@ -316,7 +306,7 @@ Definition locals_handler {effs} (e: Eff [Locals; HeapCanon] unit) :=
 Definition memory_fusion e :=
   (interpret (locals_handler e) unit) (alloc_locals e).
 
-Definition x: com := ("X" ::= ANum 3;;; CStore 1 ( 4 + 7);;; "Y" ::= AId "X").
+Definition x: com := ("X" ::= ANum 3;;; CStore 1 ( 4 + 7);;; "Y" ::= ALoad 1;;; "Z" ::= ANum 4).
 
 Definition x_itree := ⟦ x ⟧.
 
