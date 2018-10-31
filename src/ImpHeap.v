@@ -186,12 +186,12 @@ Program Fixpoint run_state_context_help (acc: context * state)
   end.
 Next Obligation.
   inversion l; subst.
-  - refine [].
+  - refine (c ++ (run_state l [])).
   - refine tt.
 Defined.
 Next Obligation.
   inversion l'.
-  - refine empty.
+  - refine (app_state s (run_state l' empty)).
   - refine tt.
 Defined.
 
@@ -306,7 +306,7 @@ Definition locals_handler {effs} (e: Eff [Locals; HeapCanon] unit) :=
 Definition memory_fusion e :=
   (interpret (locals_handler e) unit) (alloc_locals e).
 
-Definition x: com := ("X" ::= ANum 3;;; CStore 1 ( 4 + 7);;; "Y" ::= ALoad 1;;; "Z" ::= ANum 4).
+Definition x: com := ("X" ::= ANum 3;;; CStore 1 ( 4 + 7);;; "Y" ::= ALoad 1).
 
 Definition x_itree := ⟦ x ⟧.
 
