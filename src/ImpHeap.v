@@ -132,8 +132,8 @@ Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] (unit: Type))
                  | inl l => match l with
                            | Read addr => st <- send Get;
                                            match st addr with
-                                           | None => send NullPointerException;; pure tt
-                                           | Some v => interpret_imptree (k ltac:(subst; refine v))
+                                           | None => (*send NullPointerException;;*) pure tt
+                                           | Some v => interpret_imptree (k _)
                                            end
                            | Write a v => st <- send Get;
                                            send (Put (update st a v));;
@@ -144,8 +144,8 @@ Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] (unit: Type))
                            match u' with
                            | Read addr => l <- send Get;
                                         match find_key addr l with
-                                        | None => send NullPointerException;; pure tt
-                                        | Some v => interpret_imptree (k ltac:(subst;refine v))
+                                        | None => (*send NullPointerException;;*) pure tt
+                                        | Some v => interpret_imptree (k _)
                                         end
                            | Write a v => l <- send Get;
                                           send (Put ((a, v)::l));;
