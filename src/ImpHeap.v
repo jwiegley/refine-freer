@@ -112,6 +112,15 @@ Fixpoint denote_imp (c: com): Eff [Locals; HeapCanon] unit :=
                           pure tt
   end.
 
+Definition handler_locals {effs} : Locals ~> Eff effs :=
+  fun _ L => pure (runHeap 0 L).
+
+Definition handler_heap: HeapCanon ~> Eff [] :=
+  fun _ H => pure (runHeap 0 H).
+
+Definition interpret_locals {v} :=
+  run \o (interpret handler_heap) v \o (interpret handler_locals) v.
+
 Polymorphic Cumulative Inductive RunTimeError@{i j} : Type@{i} -> Type@{j} :=
 | NullPointerException : RunTimeError Empty_set.
 
@@ -132,25 +141,22 @@ Program Fixpoint interpret_imptree (e: Eff [Locals; HeapCanon] (unit: Type))
                  | inl l => match l with
                            | Read addr => st <- send Get;
                                            match st addr with
-                                           | None => (*send NullPointerException;;*) pure tt
+                                           | None => send NullPointerException;; pure tt
                                            | Some v => interpret_imptree (k _)
                                            end
                            | Write a v => st <- send Get;
                                            send (Put (update st a v));;
-                                           interpret_imptree (k (runHeap v l));;
-                                           pure tt
+                                           interpret_imptree (k _)
                            end
-                 | inr r => let u' := extract r in
-                           match u' with
+                 | inr r => match extract r with
                            | Read addr => l <- send Get;
                                         match find_key addr l with
-                                        | None => (*send NullPointerException;;*) pure tt
+                                        | None => send NullPointerException;; pure tt
                                         | Some v => interpret_imptree (k _)
                                         end
                            | Write a v => l <- send Get;
                                           send (Put ((a, v)::l));;
-                                          interpret_imptree (k (runHeap v u'));;
-                                          pure tt
+                                          interpret_imptree (k _)
                            end
                  end
   end.
@@ -171,7 +177,7 @@ Program Fixpoint run_state_context_help (acc: context * state)
         (e: Eff [State context; State state; RunTimeError] unit)
   : option (context * state) :=
   match e with
-  | Pure c => Some acc
+  | Pure _ => Some acc
   | Impure u k => match decomp u with
                  | inl l => let st := run_state l [] in
                            let new_acc := ((fst acc) ++ st, snd acc) in
@@ -203,43 +209,46 @@ Definition interp_imp e
 
 Definition interp := run_state_context \o interp_imp.
 
-Fixpoint interpret_imptree' (e: Eff [HeapCanon] unit):
-  Eff [State context; RunTimeError] context :=
+Program Fixpoint interpret_imptree' (e: Eff [HeapCanon] unit):
+  Eff [State context; RunTimeError] unit :=
   match e with 
-  | Pure v => pure []
-  | Impure u q => let u' := extract u in
-                 match u' with
+  | Pure v => pure tt
+  | Impure u k => match extract u with
                  | Read addr => l <- send Get;
                                  match find_key addr l with
-                                 | None => send NullPointerException;; pure []
-                                 | Some v => xs <- interpret_imptree' (q (runHeap v u'));
-                                                                       pure xs
+                                 | None => send NullPointerException;; pure tt
+                                 | Some v => interpret_imptree' (k _)
                                  end
                  | Write a v => l <- send Get;
                                  send (Put ((a, v)::l));;
-                                 xs <- interpret_imptree' (q (runHeap v u'));
-                                 pure ((a,v)::xs)
+                                 interpret_imptree' (k _)
                  end
   end.
 
-Program Fixpoint run_context (e: Eff [State context; RunTimeError] context) : option context :=
+Program Fixpoint run_context_help (acc: context) (e: Eff [State context; RunTimeError] unit) : option context :=
   match e with
-  | Pure c => Some c
+  | Pure _ => Some acc
   | Impure u k => match decomp u with
-                 | inl l => run_context (k _)
+                 | inl l => let st := run_state l [] in
+                           let new_acc := acc ++ st in
+                           run_context_help new_acc (k _)
                  | inr r => None
                  end
   end.
 Next Obligation.
   inversion l.
-  - refine [].
+  - refine (acc ++ (run_state l [])).
   - refine tt.
 Defined.
 
-Definition interp' e := run_context (send (Put []);; interpret_imptree' e).
+Definition interp'_imp e: Eff [State context; RunTimeError] unit :=
+  (send (Put []);; interpret_imptree' e).
+
+Definition run_context := run_context_help [].
+
+Definition interp' := run_context \o interp'_imp.
 
 Notation "'⟦' c '⟧'" := (denote_imp c) (at level 40).
-
 
 Definition move_heap (move: nat) `(h: HeapCanon v): HeapCanon v :=
   match h with
@@ -265,9 +274,6 @@ Definition get_local `(h: Locals t): string :=
   | Write addr _ => addr
   end.
 
-(* In order to add arbitrary effects I need an interpreter for each effect
- * A TypeClass sounds like a good idea to achieve that
- *)
 Fixpoint get_locals {t} (e: Eff [Locals; HeapCanon] t):  list string :=
   match e with
   | Pure v => []
@@ -303,7 +309,7 @@ Definition locals_handler' {effs} (l: list string) : Locals ~> Eff (HeapCanon::e
 Definition locals_handler {effs} (e: Eff [Locals; HeapCanon] unit) :=
   @locals_handler' effs (get_locals e).
 
-Definition memory_fusion e :=
+Definition fuse e :=
   (interpret (locals_handler e) unit) (alloc_locals e).
 
 Definition x: com := ("X" ::= ANum 3;;; CStore 1 ( 4 + 7);;; "Y" ::= ALoad 1).
@@ -312,34 +318,80 @@ Definition x_itree := ⟦ x ⟧.
 
 Eval compute in (x_itree).
 Eval compute in (get_locals x_itree).
-Eval cbn in (interp_imp x_itree).
-Eval cbn in (interp x_itree).
+Eval compute in (interp_imp x_itree).
+(*Eval cbn in (interp x_itree). *)(* Takes a very long time *)
 Eval compute in (alloc_locals x_itree).
-Eval compute in (memory_fusion x_itree).
-Eval compute in (interp' (memory_fusion x_itree)).
+Eval compute in (fuse x_itree).
+Eval compute in (interp' (fuse x_itree)).
+Require Import Coq.Sorting.Permutation.
 
-Lemma xx: exists l, interp x_itree = Some l.
+Definition relate_mems (cs: context * state) (c: context):=
+  exists (m: (context * state) -> context), Permutation (m cs) c.
+
+Infix "~=" := relate_mems (at level 60, no associativity).
+
+Require Import FunctionalExtensionality.
+
+Lemma app_state_empty_r : forall v,
+  (app_state empty v) = v.
 Proof.
-  Opaque run_state_context.
-  unfold interp.
-  cbn.
-  Transparent run_state_context.
+  intro.
+  unfold app_state.
+  extensionality x.
   simpl.
+  reflexivity.
+Qed.
 
-Fixpoint heapfy (c: nat) (l: list (string*nat)): list (nat*nat) :=
-  match l with
-  | [] => []
-  | (s, n)::xs => (c,n) :: heapfy (S c) xs
-  end.
-
-Theorem interp_correct (c:com):
-  forall locs heap,
-  let e := denote_imp c in
-  let xs' := interpret_imptree' (memory_fusion e) in
-  (locs, heap) = interpret_imptree e ->
-  exists map, map locs heap = xs'.
+Lemma app_state_empty_l : forall v,
+  (app_state v empty) = v.
 Proof.
-  intros locs heap e xs' H.
-  exists (fun (l:list (string * nat)) (h:list (nat*nat)) =>
+  intro.
+  unfold app_state.
+  extensionality x.
+  destruct (v x); eauto.
+Qed.
+Hint Rewrite app_state_empty_r app_state_empty_l.
+
+Lemma interp_assgn: forall a s e n,
+    denote_aexp a = e ->
+    interpret_locals e = n ->
+    interp (⟦ s ::= a ⟧) = Some ([], update empty s n).
+Proof.
+  induction a; intros.
+  - simpl in *.
+    subst.
+    auto.
+  - simpl in *.
+    subst.
+    simpl.
+    unfold interpret_locals.
+    simpl.
+    unfold interp.
+    simpl.
+    unfold interp_imp.
+    simpl.
+    unfold run_state_context.
+    simpl.
+    admit.
+  - 
+Admitted.
+
+Theorem memory_fusion_correct (c:com):
+  forall s,
+  interp (⟦ c ⟧) = Some s ->
+  exists z, interp' (fuse (⟦ c ⟧)) = Some z /\ s ~= z.
+Proof.
+  intros s H.
+  induction c.
+  - simpl.
+    inversion H.
+    exists [].
+    cbv; intuition.
+    exists (fun _ => []).
+    eauto.
+  - simpl.
+    cbn in *.
+  remember (get_locals (⟦ c ⟧)) as l.
+  exists (fun (l:context) (h:state) =>
        heapfy 0 l ++ map (fun x => (fst x + Datatypes.length l, snd x)) h).
 Admitted.
