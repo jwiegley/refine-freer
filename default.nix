@@ -115,9 +115,7 @@ in pkgs.stdenv.mkDerivation rec {
   src =
     if pkgs.lib.inNixShell
     then null
-    else if pkgs ? coqFilterSource
-         then pkgs.coqFilterSource [] ./.
-         else ./.;
+    else ./.;
 
   buildInputs = [
     coq coq.ocaml coq.camlp5 coq.findlib
