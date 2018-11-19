@@ -163,23 +163,15 @@ Proof.
 Admitted.
 
 
-
-Definition merge_impures {effs f x a}: (forall x, f x -> (x -> Eff effs a)) -> 
-
-     = Impure (UThis Get)
-         (fun x : string -> nat =>
-          Impure (UThis Get)
-            (fun x0 : total_map nat =>
-             Impure (UThis (Put (x0 & {X --> x Y}))) (fun _ : () => Pure ())))
-
 Lemma normalize_nat : forall (a b: nat),
-  ((fun x => (fun y => x + x)) a b) = (fun x => x + x).
+  ((fun x => (fun y => x + x)) a b) = (fun x => x + x) a.
 Proof.
   intros.
   simpl.
   reflexivity.
 Qed.
 
+(*
 Fixpoint normalize_r `(e: Eff (State v :: effs) unit) (b: bool) (c: v)
   : Eff (State v :: effs) unit :=
   match e with
@@ -188,7 +180,7 @@ Fixpoint normalize_r `(e: Eff (State v :: effs) unit) (b: bool) (c: v)
                          | inl l => _
                          end
   end.
-
+*)
 
 
 Definition refines {a effs} (e1 e2: Eff effs a) := 
