@@ -94,6 +94,8 @@ Definition swap_spec1: Eff [State state] unit :=
 Definition swap_spec2: Eff [State state] unit :=
   st <- send Get;
   send (Put (st & {W --> st Y}));;
+  send (Put (st & {X --> st Y}));;
+  send (Put (st & {Y --> st Y}));;
   st' <- send Get;
   send (Put (st' & {X --> st' Y}));;
   pure tt.
@@ -111,25 +113,57 @@ Eval cbn in swap_spec1.
  3) put s >>= get =~= s
 *)
 
-Program Fixpoint opt_getget' {effs} (b: bool) (s: state) `(e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
+Program Fixpoint opt' {effs} (bget bput: bool) (s: state) `(e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
   match e with
   | Pure x => pure x
-  | Impure u k => let default := fun b' s' x => opt_getget' b' s' (k x) in
+  | Impure u k => let default := fun bget' bput' s' x => opt' bget' bput' s' (k x) in
                  match decomp u with
                  | inl st =>
                    match st with
-                   | Get => if b then default true s _
-                           else Impure u (fun x => default true _ x)
-                   | Put x => Impure u (default false s)
+                   | Get => if bget then default true false s _
+                           else Impure u (fun x => default true false _ x)
+                   | Put x => if bput then default false true s _
+                             else Impure u (default false true s)
                    end
 (*Let's assume for now that we don't know how the effects interact with each other *)
+                 | _ => Impure u (default false false s) 
+                 end
+  end.
+Next Obligation.
+  exact tt.
+Defined.
+
+Definition opt {effs} := @opt' effs false false (t_empty 0).
+
+Eval cbn in ((denote_imp swap_impl)).
+Eval cbn in (opt _ (denote_imp swap_impl)).
+Eval cbn in (opt swap_spec2).
+
+Program Fixpoint opt_putput' {effs} (b: bool) (s: state) `(e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
+  match e with
+  | Pure x => pure x
+  | Impure u k => let default := fun b' s' x => opt_putput' b' s' (k x) in
+                 match decomp u with
+                 | inl st =>
+                   match st with
+                   | Get => Impure u (default false s)
+                   | Put x => if b then default true s _
+                           else Impure u (fun x => default true _ x)
+                   end
+                 (* same *)
                  | _ => Impure u (default false s) 
                  end
   end.
-Definition erase_getget {effs} := @opt_getget' effs false (t_empty 0).
+Next Obligation.
+  exact tt.
+Defined.
+
+Definition erase_putput {effs} := @opt_putput' effs false (t_empty 0).
 
 Eval cbn in ((denote_imp swap_impl)).
-Eval cbn in (erase_getget _ (denote_imp swap_impl)).
+Eval cbn in (erase_putput _ (erase_getget _ (denote_imp swap_impl))).
+
+
 Eval cbn in swap_spec1.
 Eval cbn in swap_spec2.
 
