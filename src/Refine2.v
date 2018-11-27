@@ -137,7 +137,7 @@ Definition opt {effs} := @opt' effs false false (t_empty 0).
 
 Eval cbn in ((denote_imp swap_impl)).
 Eval cbn in (opt _ (denote_imp swap_impl)).
-Eval cbn in (opt swap_spec2).
+Eval cbn in (opt _ swap_spec2).
 
 Eval cbn in swap_spec1.
 Eval cbn in swap_spec2.
