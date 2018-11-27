@@ -100,47 +100,36 @@ Definition swap_spec2: Eff [State state] unit :=
 
 Definition swap_impl: com :=
   W ::= Y;;;
-  X ::= Y.
+  X ::= Y + Y + Y.
 
 Eval cbn in (denote_imp swap_impl).
 Eval cbn in swap_spec1.
 
-(* Write a function to transform 
- * (fun x => 1 + (fun y => x + y))
- * into ~~~>
- * (fun x => 1 + x + x)
+(* We want an optmization under the state laws, which should be:
+ 1) get >>= get =~= get
+ 2) put s' >>= put s =~= put s
+ 3) put s >>= get =~= s
 *)
 
-Definition blah: (nat -> nat -> nat) -> nat -> nat :=
-  fun f x => f x x.
-
-Program Fixpoint merge_impures `(e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
+Program Fixpoint opt_getget' {effs} (b: bool) (s: state) `(e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
   match e with
   | Pure x => pure x
-  | Impure u k => let default := (fun x => merge_impures (k x)) in
+  | Impure u k => let default := fun b' s' x => opt_getget' b' s' (k x) in
                  match decomp u with
                  | inl st =>
                    match st with
-                   | Get => Impure u (fun x =>
-                                       match k x with
-                                       | Pure x => pure x
-                                       | Impure u' k' =>
-                                         match decomp u' with
-                                         | inl st' =>
-                                           match st' with
-                                           | Get => merge_impures (k' _)
-                                           | Put y => merge_impures (k x)
-                                           end
-                                         | _ => merge_impures (k x)
-                                         end
-                                       end)
-                   | Put x => Impure u default
+                   | Get => if b then default true s _
+                           else Impure u (fun x => default true _ x)
+                   | Put x => Impure u (default false s)
                    end
-                 | _ => Impure u default
+(*Let's assume for now that we don't know how the effects interact with each other *)
+                 | _ => Impure u (default false s) 
                  end
   end.
+Definition erase_getget {effs} := @opt_getget' effs false (t_empty 0).
 
-Eval cbn in (merge_impures (denote_imp swap_impl)).
+Eval cbn in ((denote_imp swap_impl)).
+Eval cbn in (erase_getget _ (denote_imp swap_impl)).
 Eval cbn in swap_spec1.
 Eval cbn in swap_spec2.
 
@@ -185,6 +174,8 @@ Fixpoint normalize_r `(e: Eff (State v :: effs) unit) (b: bool) (c: v)
 
 Definition refines {a effs} (e1 e2: Eff effs a) := 
   forall t, e2 = t -> e1 = t.
+
+(* Next steps is to implement the monad laws for State, check sketchbook *)
 
 
 
