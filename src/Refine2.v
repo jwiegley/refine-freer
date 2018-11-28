@@ -118,9 +118,11 @@ Definition state_default: forall eff r, FindElem eff [State state] -> eff r -> r
   inversion X1.
 Defined.
 
-Eval compute in (Eff_size swap_spec1 state_default).
-Eval compute in (Eff_size swap_spec2 state_default).
-Eval compute in (Eff_size (denote_imp swap_impl) state_default).
+Definition state_size {v} (e: Eff [State state] v): nat := Eff_size e state_default.
+
+Eval compute in (state_size swap_spec1).
+Eval compute in (state_size swap_spec2).
+Eval compute in (state_size (denote_imp swap_impl)).
 
 Open Scope bool_scope.
 
@@ -176,35 +178,14 @@ Fixpoint opt_putget `(e: Eff [State state] v): Eff [State state] v :=
      end eq_refl
    end.
 
-Definition putputex: Eff [State state] unit :=
-  st <- send Get;
-  send (Put (st & {W --> st X}));;
-  send (Put (st & {W --> st Y; X --> st Y}));;
-  send (Put (st & {W --> st X}));;
-  pure tt.
+Definition step_opt {v} := @opt_putget v \o @opt_getget v \o @opt_putput v.
 
-Eval cbn in (opt_putput (opt_putput putputex)).
-
-Fixpoint opt' {effs v} (bget bput b: bool) (s: state) (e: Eff (State state :: effs) v): Eff (State state :: effs) v :=
-  match e with
-  | Pure x => pure x
-  | Impure u k =>
-    match decomp u with
-    | inl st =>
-      match st in State _ state return state = _ -> _ with
-      | Get => fun Heq => if (bget || b) then opt' true false b s (k (rew Heq in s))
-                      else Impure u (fun x => opt' true false false s (k x))
-      | Put st' => fun Heq => if bput then opt' false true true st' (k (rew Heq in tt))
-                        else Impure u (fun x => opt' false true true st' (k x))
-      end eq_refl
-    (*Let's assume for now that we don't know how the effects interact with each other *)
-    | _ => Impure u (fun x => opt' false false false s (k x)) 
-    end
+Program Fixpoint opt `(e: Eff [State state] v) {measure (state_size e)} :=
+  let step := step_opt e in
+  match lt_dec (state_size step) (state_size e) with
+  | left _ => opt step
+  | _ => step
   end.
-
-Definition opt {effs v} := @opt' effs v false false false (t_empty 0).
-
-Eval cbn in (opt swap_spec2).
 
 Definition swap_spec1_opt: Eff [State state] unit :=
   (opt swap_spec1).
@@ -217,8 +198,8 @@ Definition swap_impl_opt: Eff [State state] unit :=
 
 Eval cbn in ((denote_imp swap_impl)).
 (* There is a bug on put put *)
-Eval cbn in (swap_impl_opt).
 Eval cbn in (swap_spec1_opt).
+Eval cbn in (swap_impl_opt).
 Eval cbn in (swap_spec2_opt).
 (* I need to apply this function multiple times now, until the term normalizes.
 What can I do? *)
