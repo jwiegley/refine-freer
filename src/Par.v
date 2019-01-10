@@ -22,11 +22,18 @@ Require Import
 Inductive IVar (a: Type): Type :=
   | ivar: IVar a.
 
+Arguments ivar {_}.
+
 Inductive Par (s : Type) : Type -> Type :=
   | new : Par s (IVar s)
   | get : IVar s -> Par s s
   | put : IVar s -> s -> Par s unit
   | fork: Par s unit -> Par s unit.
+
+Arguments new {_}.
+Arguments get {_} _.
+Arguments put {_} _ _.
+Arguments fork {_} _.
 
 Lemma ivar_unit: forall v, IVar v.
 Proof.
@@ -34,12 +41,18 @@ Proof.
 Qed.
 
 Definition send_get: Par () () :=
-  get () (ivar ()).
+  get ivar.
 
 Definition put_ex : Eff [Par nat] nat :=
-  Impure (UThis (new _))
-         (fun i => Impure (UThis (put _ i 3))
-                       (fun _ => Impure (UThis (get _ i)) (fun x => pure x))).
+  Impure (UThis new)
+         (fun i => Impure (UThis (put i 3))
+                       (fun _ => Impure (UThis (get i)) (fun x => pure x))).
+
+Program Definition put_ex' : Eff [Par nat] nat :=
+    (i <- send new;
+     send (put i 3);;
+     x <- send (get i);
+     pure x).
 
 Definition spawn a (p: Par a ()): Eff [Par a] (IVar a).
 Proof.
