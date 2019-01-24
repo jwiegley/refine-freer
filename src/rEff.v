@@ -11,41 +11,47 @@ Import EqNotations.
 Generalizable All Variables.
 Set Printing Universes.
 
-Inductive rFreer (f : ((list Type): Type) -> Type -> Type) (a : Type) : Type :=
+Polymorphic Inductive rFreer (f : Type -> Type -> Type) (a: Type): Type :=
 | rPure : a -> rFreer f a
-| rImpure : forall (x: Type) (ts: (list Type): Type), f ts x -> (hlist (rFreer f) ts) -> (x -> rFreer f a) -> rFreer f a.
+| rImpure : forall (x: Type) (b: Type), f b x -> rFreer f b -> (b -> x -> rFreer f a) -> rFreer f a.
 
 Arguments rPure {f a} _.
-Arguments rImpure {f a x ts} _ _ _.
+Arguments rImpure {f a x b} _ _ _.
 
-Program Fixpoint rFreer_fmap {r} `(f : a -> b) (x : rFreer r a) : rFreer r b :=
-  match x with
+Program Fixpoint rFreer_fmap {r} `(f : a -> b) (t : rFreer r a) : rFreer r b :=
+  match t with
   | rPure v => rPure (f v)
-  | rImpure u l k => rImpure u l (fun x => rFreer_fmap f (k x))
+  | rImpure u t' k => rImpure u t' (fun b x => rFreer_fmap f (k b x))
   end.
 
-Program Instance rFreer_Functor (f : list Type -> Type -> Type) : Functor (rFreer f) := {
+Program Instance rFreer_Functor (f : Type -> Type -> Type) : Functor (rFreer f) := {
   fmap := @rFreer_fmap f
 }.
 
-Fixpoint rFreer_ap {r} `(f : rFreer r (a -> b)) (x : rFreer r a) : rFreer r b :=
-  match f, x with
+Fixpoint rFreer_ap {r} `(ta : rFreer r (a -> b)) (t : rFreer r a) : rFreer r b :=
+  match ta, t with
   | rPure f, rPure v       => rPure (f v)
-  | rPure f, rImpure u l k => rImpure u l (fun x' => rFreer_fmap f (k x'))
-  | rImpure u l k, m       => rImpure u l (fun x' => rFreer_ap (k x') m)
+  | rPure f, rImpure u t' k => rImpure u t' (fun b x => rFreer_fmap f (k b x))
+  | rImpure u ta' k, m       => rImpure u ta' (fun b x => rFreer_ap (k b x) m)
   end.
 
-Program Instance rFreer_Applicative (f : list Type -> Type -> Type) : Applicative (rFreer f) := {
+Program Instance rFreer_Applicative (f : Type -> Type -> Type) : Applicative (rFreer f) := {
   pure := fun _ => rPure;
   ap := fun _ _ => rFreer_ap
 }.
 
-Polymorphic Fixpoint rFreer_join {r: list Type -> Type -> Type} {a} (f : rFreer r (rFreer r a)) : rFreer r a :=
-  match f with
-  | Pure v     => v
-  | Impure u l k => Impure u l (fun x => rFreer_join (k x))
+Polymorphic Program Fixpoint rFreer_bind {r} `(f : t -> rFreer r u) (i : rFreer r t) : rFreer r u :=
+  match i with
+  | rPure x => f x
+  | rImpure u t' k => rImpure u t' (fun b x => rFreer_bind f (k b x))
   end.
 
-Program Instance Freer_Monad (f : Type -> Type) : Monad (Freer f) := {
-  join := @Freer_join _
+Polymorphic Fixpoint rFreer_join {r: Type -> Type -> Type} {a} (f: rFreer r (rFreer r a))  : rFreer r a :=
+  match f with
+  | rPure x =>  x
+  | rImpure u l k => rImpure u l (fun b' x => rFreer_join (k b' x))
+  end.
+
+Program Instance Freer_Monad (f : Type -> Type -> Type) : Monad (rFreer f) := {
+  join := @rFreer_join _
 }.
