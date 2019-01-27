@@ -4,8 +4,6 @@ Require Import
   Hask.Control.Monad
   Coq.Init.Datatypes.
 
-Require Import ExtLib.Data.HList.
-
 Import EqNotations.
 
 Generalizable All Variables.

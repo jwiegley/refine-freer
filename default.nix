@@ -110,29 +110,6 @@ let
 
   };
 
-  coq-ext-lib = pkgs.stdenv.mkDerivation rec {
-    name = "coq${coq.coq-version}-ext-lib-${version}";
-    version = "1.0";
-
-    src = pkgs.fetchFromGitHub {
-      owner = "coq-ext-lib";
-      repo = "coq-ext-lib";
-      rev = "534e4e98213f0ee4299c2e3c700ee0bcd18bc313";
-      sha256 = "1ncmr1s13g0ww4csih4d2wc1kq1xsckrfapq8w44ycglqb3893m3";
-    };
-
-    buildInputs = [ coq coq.ocaml coq.camlp5 coq.findlib equations ];
-    enableParallelBuilding = true;
-
-    buildPhase = "make JOBS=$NIX_BUILD_CORES";
-    preBuild = "coq_makefile -f _CoqProject -o Makefile";
-    installFlags = "COQLIB=$(out)/lib/coq/${coq.coq-version}/";
-
-    passthru = {
-      compatibleCoqVersions = v: builtins.elem v [ "8.6" "8.7" "8.8" ];
-   };
-  };
-
 in pkgs.stdenv.mkDerivation rec {
   name = "refine-freer";
   version = "1.0";
@@ -146,7 +123,7 @@ in pkgs.stdenv.mkDerivation rec {
 
   buildInputs = [
     coq coq.ocaml coq.camlp5 coq.findlib
-    equations coq-haskell category-theory fiat-core coq-ext-lib
+    equations coq-haskell category-theory fiat-core
   ];
   enableParallelBuilding = true;
 
