@@ -65,6 +65,7 @@ Polymorphic Fixpoint rFreer_join {f : option Type -> Type -> Type}
 Program Instance Freer_Monad (f : option Type -> Type -> Type) : Monad (rFreer f) := {
   join := @rFreer_join _
 }.
+
 (*
 Inductive UnionF (a b: Type)
   : list (Type -> Type -> Type) -> Type :=
@@ -150,12 +151,31 @@ Proof.
   constructor.
 Qed.
 
-Set Printing All.
+Definition ParTree i a :=
+  rFreer (Par i) a.
 
-Definition put_ex : rFreer (Par nat) nat :=
+Definition put_ex : ParTree nat nat :=
   rImpureNoBranch new
           (fun i => rImpureBranch fork
                                   (fun u => rImpureNoBranch (put i 3)
                                                    (fun x => rPure tt))
                          (fun u u' => rImpureNoBranch (get i)
                                                       (fun x => rPure (x + 2)))).
+
+Inductive step_rEffPar {s i a}
+          (handleParNone : forall v, s -> Par i None v -> s -> v -> Prop)
+          (handleParSome : forall b v, s -> Par i (Some b) v -> _ -> s -> v -> b -> Prop) :
+          s -> ParTree i a -> ParTree i a -> s -> Prop :=
+  | HandleNoBranchS
+    : forall V st eff k st' v,
+      handleParNone V st eff st' v
+      -> step_rEffPar handleParNone handleParSome st (rImpureNoBranch eff k) (k v) st'
+  | HandleBranchS
+    : forall B V st eff k k' st' v b,
+      handleParSome B V st eff k' st' v b
+      -> step_rEffPar handleParNone handleParSome st (rImpureBranch eff k' k) (k b v) st'.
+
+(* Next steps:
+   1. Define a type of states (Figure 2)
+   2. Define handlers for effects (Figure 4)
+   3. Define congruence and transition rules (Figure 3)*)
