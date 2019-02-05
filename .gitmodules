@@ -1,0 +1,6 @@
+[submodule "coq-haskell"]
+	path = coq-haskell
+	url = https://github.com/jwiegley/coq-haskell.git
+[submodule "category-theory"]
+	path = category-theory
+	url = https://github.com/jwiegley/category-theory.git
