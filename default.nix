@@ -32,7 +32,7 @@ let
 
     installFlags = "COQLIB=$(out)/lib/coq/${coq.coq-version}/";
 
-    meta = with pkgs.stdenv.lib; {
+    meta = with pkgs.lib; {
       homepage = https://github.com/jwiegley/coq-haskell;
       description = "A library for Haskell users writing Coq programs";
       maintainers = with maintainers; [ jwiegley ];
@@ -96,7 +96,7 @@ let
       cp -pR src/* $COQLIB/user-contrib/Fiat
     '';
 
-    meta = with pkgs.stdenv.lib; {
+    meta = with pkgs.lib; {
       homepage = http://plv.csail.mit.edu/fiat/;
       description = "A library for the Coq proof assistant for synthesizing efficient correct-by-construction programs from declarative specifications";
       maintainers = with maintainers; [ jwiegley ];
